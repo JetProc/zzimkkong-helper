@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "찜콩 Helper",
+  "version": "0.1.0",
+  "description": "찜콩 게스트 페이지에서 층별 회의실 타임테이블 확인, 빈 시간 1시간 자동 선택, 예약 폼 연동을 빠르게 도와주는 확장 프로그램입니다. made by 8기 프론트엔드 파라디",
+  "author": "8기 프론트엔드 파라디",
+  "icons": {
+    "16": "src/icon.png",
+    "32": "src/icon.png",
+    "48": "src/icon.png",
+    "128": "src/icon.png"
+  },
+  "action": {
+    "default_icon": "src/icon.png"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://zzimkkong.com/guest/*"
+      ],
+      "css": [
+        "src/vendor/toastify-js/toastify.min.css"
+      ],
+      "js": [
+        "src/vendor/toastify-js/toastify.min.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/icon.png",
+        "src/fonts/BMDOHYEON_ttf.ttf"
+      ],
+      "matches": [
+        "https://zzimkkong.com/*"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "https://zzimkkong.com/*",
+    "https://k8s.zzimkkong.com/*"
+  ]
+}
