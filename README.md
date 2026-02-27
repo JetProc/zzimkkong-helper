@@ -1,4 +1,4 @@
-
+![일정 짜는 행성이](src/icon.png)
 # 📌 찜콩 Helper (Chrome Extension)
 
 찜콩 사이트에서 **층/회의실별 타임테이블을 한눈에 확인**하고,
