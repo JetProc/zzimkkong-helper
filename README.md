@@ -42,21 +42,19 @@
 
 ### 2-2. 자동 반영 후 토스트
 
-![토스트 안내](docs/images/03-toast.png)
+![토스트 안내](docs/images/02-toast.png)
 
-> 이미지 설명: "예약 세팅이 완료되었습니다. 사용 목적을 입력해주세요."
 
-### 2-4. 매뉴얼 펼침 상태
+### 2-3. 매뉴얼 펼침 상태
 
-![매뉴얼](docs/images/04-manual.png)
+![매뉴얼](docs/images/03-manual.png)
 
-> 이미지 설명: 사용 순서와 비고 안내
 
 ---
 
 ## 3) GitHub에서 받아 Chrome 확장 적용하기 (상세 순서)
 
-아래는 **처음 설치하는 사람 기준**으로 최대한 상세히 적었습니다.
+
 
 ### 3-1. 코드 받기
 
@@ -67,11 +65,9 @@
 3. 아래 명령 실행
 
 ```bash
-git clone <YOUR_GITHUB_REPO_URL>
+git clone https://github.com/JetProc/zzimkkong-helper.git
 cd zzimkkong-helper
 ```
-
-![Git clone](docs/images/install-01-git-clone.png)
 
 #### 방법 B: ZIP 다운로드
 
@@ -80,7 +76,6 @@ cd zzimkkong-helper
 3. `Download ZIP` 클릭
 4. ZIP 압축 해제
 
-![ZIP 다운로드](docs/images/install-02-zip-download.png)
 
 ---
 

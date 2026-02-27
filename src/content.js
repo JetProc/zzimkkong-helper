@@ -540,12 +540,11 @@
     manual.setAttribute('aria-hidden', String(!state.mapCalendarManualExpanded));
     manual.innerHTML = [
       "<strong class='zzk-map-calendar-manual-title'>📘 찜콩 Helper 사용 가이드</strong>",
-      "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 예약할 날짜를 먼저 고르세요.</p>",
-      "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 1시간이 자동 선택됩니다.</p>",
-      "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 자동 반영됩니다.</p>",
-      "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> 반영 후 약 3초 내 화면이 내려가며 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
-      "<p class='zzk-map-calendar-manual-item'>✍️ <b>직접 이어쓰기</b> 이동하지 않으면 '사용 목적' 칸을 한 번 클릭해 이어서 작성하세요.</p>",
-      "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> 페어링 존은 별도로 직접 예약해주세요.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 <span class='zzk-map-calendar-manual-emphasis'>예약할 날짜를 먼저 고르세요</span>.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>1시간</span>이 자동 선택됩니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
+      "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>페어링 존</span>은 별도로 직접 예약해주세요.</p>",
     ].join('');
     titleControls.appendChild(manual);
 
@@ -1228,7 +1227,7 @@
     }
   }
 
-  function showHelperToast(message, type = 'info', duration = 2300) {
+  function showHelperToast(message, type = 'info', duration = 5000) {
     const normalizedMessage = normalizeElementText(String(message ?? ''));
     if (!normalizedMessage) {
       return;
@@ -1291,7 +1290,7 @@
   }
 
   function showReservationSetupToast() {
-    showHelperToast('예약 세팅이 완료되었습니다. 사용 목적을 입력해주세요.', 'success', 2000);
+    showHelperToast('예약 세팅이 완료되었습니다. 사용 목적을 입력해주세요.', 'success', 5000);
   }
 
   function replaceNativeAlertWithToast() {
@@ -2828,6 +2827,14 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-manual-item b {
         color: #0c4a6e;
+        font-weight: 900;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-manual-emphasis {
+        color: #0369a1;
+        background: rgba(186, 230, 253, 0.52);
+        border-radius: 4px;
+        padding: 0 3px;
         font-weight: 900;
       }
 
