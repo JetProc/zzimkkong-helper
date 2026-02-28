@@ -5,6 +5,7 @@
 찜꽁 게스트 페이지에서 회의실 예약을 빠르게 처리할 수 있도록 돕는 Chrome 확장 프로그램입니다. ✨
 
 - 대상 사이트: `https://zzimkkong.com/`
+- 동작 페이지: `https://zzimkkong.com/guest/*`, `https://www.zzimkkong.com/guest/*`
 - 제작: `8기 프론트엔드 파라디`
 
 ---
@@ -55,16 +56,16 @@
 ## 🖼️ 3. 화면 예시 (이미지 자리)
 
 ### 3-1. 인라인 타임테이블
-![인라인 타임테이블](docs/images/01-inline-timetable.png)
+![인라인 타임테이블](docs/images/01-main-timetable.png)
 
-### 3-2. 팝업 내 예약 현황
-![팝업 예약 목록](docs/images/02-popup-reservations.png)
+### 3-2. 사용 가이드/매뉴얼
+![사용 가이드](docs/images/03-manual.png)
 
-### 3-3. 예약 공유 버튼/복사
-![예약 공유](docs/images/03-popup-share.png)
+### 3-3. 토스트 안내
+![토스트 안내](docs/images/02-toast.png)
 
-### 3-4. 토스트 안내
-![토스트 안내](docs/images/04-toast.png)
+### 3-4. 확장 등록 화면
+![확장 등록 화면](docs/images/install-extensions-page.png)
 
 ---
 
@@ -89,7 +90,7 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 3. `압축해제된 확장 프로그램을 로드합니다` 클릭
 4. `manifest.json`이 있는 프로젝트 루트 선택
 
-![확장 등록 화면](docs/images/install-01-load-unpacked.png)
+![확장 등록 화면](docs/images/install-extensions-page.png)
 
 ---
 
@@ -100,7 +101,7 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 3. `핀` 아이콘을 클릭해 고정
 4. 툴바에 고정된 `찜꽁 Helper` 아이콘 클릭 시 팝업 실행
 
-![확장 고정 방법](docs/images/install-02-pin-extension.png)
+> 고정(핀) 단계 이미지는 추후 `docs/images`에 추가 예정
 
 ---
 
@@ -147,7 +148,8 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 
 ### Q3. 공유 버튼 복사가 안돼요
 - 브라우저 권한/보안 정책에 따라 클립보드가 막힐 수 있음
-- 실패 시 콘솔 로그에 공유 텍스트가 출력되는지 확인
+- 게스트 페이지가 열려 있는 상태에서 다시 시도
+- 브라우저 권한(클립보드) 허용 후 재시도
 
 ### Q4. 내 예약(청록색) 표시가 안 보여요
 - 팝업에서 내 예약이 정상 조회되는지 먼저 확인
