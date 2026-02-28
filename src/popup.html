@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>찜꽁 Helper</title>
+    <link rel="stylesheet" href="./vendor/toastify-js/toastify.min.css" />
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="zzk-popup">
+      <header class="zzk-popup-header">
+        <div class="zzk-popup-brand">
+          <img id="zzk-popup-icon" class="zzk-popup-icon" src="./icon.png" alt="찜꽁 Helper" width="28" height="28" />
+          <div class="zzk-popup-brand-text">
+            <strong>찜꽁 Helper</strong>
+            <small>내 예약 현황</small>
+          </div>
+        </div>
+        <button id="zzk-refresh" class="zzk-refresh" type="button">새로고침</button>
+      </header>
+
+      <p class="zzk-popup-hint">찜꽁 로그인 상태에서 최근 예약 정보를 불러옵니다.</p>
+      <p id="zzk-popup-inline-message" class="zzk-popup-inline-message" hidden></p>
+
+      <ul id="zzk-reservation-list" class="zzk-list" hidden></ul>
+
+      <footer class="zzk-footer">
+        <a href="https://zzimkkong.com/guest/gAjJTeISFY54CNKWYmOVxQ" target="_blank" rel="noreferrer">찜꽁 사이트 열기</a>
+      </footer>
+    </main>
+
+    <script src="./vendor/toastify-js/toastify.min.js"></script>
+    <script src="./popup.js"></script>
+  </body>
+</html>

@@ -20,11 +20,17 @@
     hour: '2-digit',
     minute: '2-digit',
   });
+  const KST_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: SEOUL_TIMEZONE,
+    weekday: 'short',
+  });
   const TIME_STEP_MINUTES = 10;
   const AUTO_PICK_DURATION_MINUTES = 60;
   const MATRIX_TIME_COLUMN_WIDTH_PX = 52;
   const MATRIX_ROOM_COLUMN_MIN_WIDTH_PX = 30;
   const CURRENT_TIME_INITIAL_TOP_OFFSET_ROWS = 3;
+  const CURRENT_TIME_TARGET_VIEWPORT_RATIO = 0.45;
+  const MY_RESERVATION_CACHE_TTL_MS = 2 * 60 * 1000;
   const INLINE_ASIDE_SCROLL_CLASS = 'zzk-inline-aside-scroll';
   const CALENDAR_WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   const BIG_ROOM_NAMES = new Set(['금성', '지구', '보이저', '디스커버리']);
@@ -59,6 +65,10 @@
     autoScheduleRefreshTimer: null,
     autoPickedRange: null,
     mapCalendarManualExpanded: false,
+    popupMessageBridgeRegistered: false,
+    myReservationsCache: [],
+    myReservationsLoadedAt: 0,
+    myReservationsLoadingPromise: null,
     elements: null,
   };
 
@@ -71,6 +81,7 @@
     }
 
     replaceNativeAlertWithToast();
+    registerPopupMessageBridge();
     hookHistoryChanges();
     window.addEventListener('popstate', handleLocationChange);
     document.addEventListener('change', handleHostDateChange, true);
@@ -259,6 +270,9 @@
       state.scheduleCache.clear();
       state.activeScheduleDate = null;
       state.autoPickedRange = null;
+      state.myReservationsCache = [];
+      state.myReservationsLoadedAt = 0;
+      state.myReservationsLoadingPromise = null;
       removeMapCalendarOverlay();
       clearMapHighlights();
     }
@@ -378,6 +392,12 @@
       return;
     }
 
+    try {
+      await ensureMyReservationsForOverlayLoaded();
+    } catch (error) {
+      popupDebug('내 예약 캐시 로딩 실패', getErrorMessage(error));
+    }
+
     if (state.scheduleCache.has(date)) {
       state.activeScheduleDate = date;
       renderMapCalendarOverlay(state.scheduleCache.get(date));
@@ -404,6 +424,152 @@
     state.scheduleCache.set(date, response.data);
     state.activeScheduleDate = date;
     renderMapCalendarOverlay(response.data);
+  }
+
+  async function ensureMyReservationsForOverlayLoaded(force = false) {
+    const now = Date.now();
+    if (
+      !force &&
+      Array.isArray(state.myReservationsCache) &&
+      state.myReservationsLoadedAt > 0 &&
+      now - state.myReservationsLoadedAt < MY_RESERVATION_CACHE_TTL_MS
+    ) {
+      return state.myReservationsCache;
+    }
+
+    if (state.myReservationsLoadingPromise) {
+      return state.myReservationsLoadingPromise;
+    }
+
+    state.myReservationsLoadingPromise = (async () => {
+      const merged = [];
+      const seen = new Set();
+      let page = 0;
+      let hasNext = true;
+      let guard = 0;
+
+      while (hasNext && guard < 20) {
+        const response = await fetchMyReservationsForPopup({ page });
+        const items = Array.isArray(response?.items) ? response.items : [];
+
+        items.forEach((item) => {
+          const key = [
+            Number.isInteger(item?.id) ? String(item.id) : 'no-id',
+            Number.isFinite(item?.startTimestamp) ? String(item.startTimestamp) : 'no-start',
+            Number.isInteger(item?.roomId) ? String(item.roomId) : normalizeElementText(item?.roomName || ''),
+          ].join('|');
+
+          if (seen.has(key)) {
+            return;
+          }
+          seen.add(key);
+          merged.push(item);
+        });
+
+        const pagination = response?.pagination;
+        if (typeof pagination?.hasNext === 'boolean') {
+          hasNext = pagination.hasNext;
+        } else if (Number.isInteger(pagination?.totalPages) && Number.isInteger(pagination?.page)) {
+          hasNext = pagination.page + 1 < pagination.totalPages;
+        } else {
+          hasNext = false;
+        }
+
+        page += 1;
+        guard += 1;
+      }
+
+      state.myReservationsCache = merged;
+      state.myReservationsLoadedAt = Date.now();
+      popupDebug('내 예약 캐시 갱신 완료', { count: merged.length });
+      return merged;
+    })()
+      .catch((error) => {
+        state.myReservationsCache = [];
+        state.myReservationsLoadedAt = 0;
+        throw error;
+      })
+      .finally(() => {
+        state.myReservationsLoadingPromise = null;
+      });
+
+    return state.myReservationsLoadingPromise;
+  }
+
+  function buildMyReservationsByRoomForDate(scheduleDate) {
+    const byRoom = new Map();
+    if (!isDateString(scheduleDate)) {
+      return byRoom;
+    }
+
+    const source = Array.isArray(state.myReservationsCache) ? state.myReservationsCache : [];
+    source.forEach((reservation) => {
+      if (!reservation || reservation.startDateKey !== scheduleDate) {
+        return;
+      }
+
+      if (!Number.isInteger(reservation.startMinute) || !Number.isInteger(reservation.endMinute)) {
+        return;
+      }
+
+      const keys = [];
+      if (Number.isInteger(reservation.roomId)) {
+        keys.push('id:' + reservation.roomId);
+      }
+
+      const normalizedName = normalizeElementText(reservation.roomName || '');
+      if (normalizedName) {
+        keys.push('name:' + normalizedName);
+      }
+
+      keys.forEach((key) => {
+        const list = byRoom.get(key) || [];
+        list.push(reservation);
+        byRoom.set(key, list);
+      });
+    });
+
+    return byRoom;
+  }
+
+  function getMyReservationsForRoom(myReservationsByRoom, room) {
+    const candidates = [];
+
+    if (Number.isInteger(room?.id)) {
+      const byId = myReservationsByRoom.get('id:' + room.id);
+      if (Array.isArray(byId)) {
+        candidates.push(...byId);
+      }
+    }
+
+    const normalizedRoomName = normalizeElementText(room?.name || '');
+    if (normalizedRoomName) {
+      const byName = myReservationsByRoom.get('name:' + normalizedRoomName);
+      if (Array.isArray(byName)) {
+        candidates.push(...byName);
+      }
+    }
+
+    if (candidates.length <= 1) {
+      return candidates;
+    }
+
+    const unique = [];
+    const seen = new Set();
+    candidates.forEach((candidate) => {
+      const key = [
+        Number.isInteger(candidate?.id) ? candidate.id : 'no-id',
+        candidate?.startMinute,
+        candidate?.endMinute,
+      ].join('|');
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      unique.push(candidate);
+    });
+
+    return unique;
   }
 
   function renderMapCalendarOverlay(scheduleData) {
@@ -463,6 +629,7 @@
     const currentMinute = isTodaySchedule ? getCurrentMinuteInKST() : null;
     const activeAutoPickedRange =
       state.autoPickedRange && state.autoPickedRange.date === scheduleData.date ? state.autoPickedRange : null;
+    const myReservationsByRoom = buildMyReservationsByRoomForDate(scheduleDate);
 
     const card = document.createElement('div');
     card.className = 'zzk-map-calendar-card';
@@ -492,7 +659,7 @@
     const brandIcon = document.createElement('img');
     brandIcon.className = 'zzk-map-calendar-brand-icon';
     brandIcon.src = getExtensionIconUrl();
-    brandIcon.alt = '찜콩 Helper 아이콘';
+    brandIcon.alt = '찜꽁 Helper 아이콘';
     brandIcon.width = 34;
     brandIcon.height = 34;
     brand.appendChild(brandIcon);
@@ -502,7 +669,7 @@
 
     const brandTitle = document.createElement('strong');
     brandTitle.className = 'zzk-map-calendar-brand-title';
-    brandTitle.textContent = '찜콩 Helper';
+    brandTitle.textContent = '찜꽁 Helper';
     brandText.appendChild(brandTitle);
 
     const brandMeta = document.createElement('small');
@@ -519,7 +686,7 @@
     const helpButton = document.createElement('button');
     helpButton.type = 'button';
     helpButton.className = 'zzk-map-calendar-help-button';
-    helpButton.textContent = '찜콩 Helper 매뉴얼';
+    helpButton.textContent = '찜꽁 Helper 매뉴얼';
     topBarActions.appendChild(helpButton);
 
     const collapseButton = document.createElement('button');
@@ -539,9 +706,10 @@
     manual.classList.toggle('is-expanded', state.mapCalendarManualExpanded);
     manual.setAttribute('aria-hidden', String(!state.mapCalendarManualExpanded));
     manual.innerHTML = [
-      "<strong class='zzk-map-calendar-manual-title'>📘 찜콩 Helper 사용 가이드</strong>",
+      "<strong class='zzk-map-calendar-manual-title'>📘 찜꽁 Helper 사용 가이드</strong>",
       "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 <span class='zzk-map-calendar-manual-emphasis'>예약할 날짜를 먼저 고르세요</span>.</p>",
       "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>1시간</span>이 자동 선택됩니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>청록색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
       "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>페어링 존</span>은 별도로 직접 예약해주세요.</p>",
@@ -592,13 +760,13 @@
 
     const clickGuide = document.createElement('small');
     clickGuide.className = 'zzk-map-calendar-guide';
-    clickGuide.textContent = '⏱️ 회색은 지난 시간이라 선택되지 않아요. 하늘색은 방금 선택된 1시간 구간입니다.';
+    clickGuide.textContent = '⏱️ 회색은 지난 시간이라 선택되지 않아요. 하늘색은 방금 선택한 1시간, 청록색은 내 예약입니다.';
     titleControls.appendChild(clickGuide);
 
     const legend = document.createElement('div');
     legend.className = 'zzk-map-calendar-legend';
     legend.innerHTML =
-      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="past">지난 시간</span><span class="autopick">클릭 선택 1시간</span><span class="current">현재 시간선</span>';
+      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="mine">내 예약</span><span class="past">지난 시간</span><span class="autopick">클릭 선택 1시간</span><span class="current">현재 시간선</span>';
     titleControls.appendChild(legend);
 
     const body = document.createElement('div');
@@ -750,6 +918,15 @@
         );
 
         const isBusy = overlappedReservations.length > 0;
+        const myReservationsForRoom = getMyReservationsForRoom(myReservationsByRoom, room);
+        const myOverlappedReservations = myReservationsForRoom.filter(
+          (reservation) =>
+            Number.isInteger(reservation.startMinute) &&
+            Number.isInteger(reservation.endMinute) &&
+            reservation.startMinute < slot.endMinute &&
+            reservation.endMinute > slot.startMinute
+        );
+        const isMyReservation = myOverlappedReservations.length > 0;
         const isPastSlot = Number.isInteger(currentMinute) && slot.startMinute < currentMinute;
         const autoPickEndMinute = slot.startMinute + AUTO_PICK_DURATION_MINUTES;
         const maxBoundCandidates = [24 * 60];
@@ -798,11 +975,25 @@
           activeAutoPickedRange.startMinute < slot.endMinute &&
           activeAutoPickedRange.endMinute > slot.startMinute;
 
+        if (isMyReservation && !isPastSlot) {
+          slotElement.classList.add('mine');
+        }
+
         if (isAutoPickedRange && !isPastSlot) {
           slotElement.classList.add('autopick');
         }
 
         const slotEndLabel = minuteToHourMinute(slot.endMinute);
+        const myReservationPreview = myOverlappedReservations
+          .slice(0, 2)
+          .map((reservation) => {
+            const purposeText =
+              typeof reservation.purpose === 'string' && reservation.purpose.trim() !== ''
+                ? ` ${reservation.purpose.trim()}`
+                : '';
+            return `${minuteToHourMinute(reservation.startMinute)}~${minuteToHourMinute(reservation.endMinute)}${purposeText}`;
+          })
+          .join(' | ');
         const reservationPreview = overlappedReservations
           .slice(0, 2)
           .map((reservation) =>
@@ -814,6 +1005,10 @@
 
         if (isPastSlot) {
           slotElement.title = `${room.name} (${floorLabel}) ${slot.label}~${slotEndLabel} 지난 시간으로 선택할 수 없습니다.`;
+        } else if (isMyReservation) {
+          slotElement.title = `${room.name} (${floorLabel}) ${slot.label}~${slotEndLabel} 내 예약${
+            myReservationPreview ? ` (${myReservationPreview})` : ''
+          }`;
         } else if (isBusy) {
           slotElement.title = `${room.name} (${floorLabel}) ${slot.label}~${slotEndLabel} 예약 있음${
             reservationPreview ? ` (${reservationPreview})` : ''
@@ -833,6 +1028,9 @@
     if (isTodaySchedule && currentSlotRowElement) {
       requestAnimationFrame(() => {
         scrollMapCalendarBodyToCurrentTime(body, currentSlotRowElement);
+        requestAnimationFrame(() => {
+          scrollMapCalendarBodyToCurrentTime(body, currentSlotRowElement);
+        });
       });
     }
   }
@@ -944,9 +1142,27 @@
       return;
     }
 
-    const rowHeight = Math.max(currentRowElement.getBoundingClientRect().height, 1);
-    const topOffset = Math.max(rowHeight * CURRENT_TIME_INITIAL_TOP_OFFSET_ROWS, 24);
-    const nextScrollTop = Math.max(currentRowElement.offsetTop - topOffset, 0);
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const rowRect = currentRowElement.getBoundingClientRect();
+    const rowHeight = Math.max(rowRect.height, 1);
+    const rowCenterOffset = rowRect.top - containerRect.top + scrollContainer.scrollTop + rowHeight / 2;
+
+    const floorHeaderHeight = Math.max(
+      scrollContainer.querySelector('.zzk-floor-header-row')?.getBoundingClientRect().height ?? 0,
+      0
+    );
+    const roomHeaderHeight = Math.max(
+      scrollContainer.querySelector('.zzk-room-header-row')?.getBoundingClientRect().height ?? 0,
+      0
+    );
+    const stickyHeaderHeight = floorHeaderHeight + roomHeaderHeight;
+    const minimumVisualTop = stickyHeaderHeight + rowHeight * CURRENT_TIME_INITIAL_TOP_OFFSET_ROWS;
+
+    const preferredVisualTop = Math.max(scrollContainer.clientHeight * CURRENT_TIME_TARGET_VIEWPORT_RATIO, minimumVisualTop, 56);
+
+    const rawScrollTop = rowCenterOffset - preferredVisualTop;
+    const maxScrollTop = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
+    const nextScrollTop = Math.min(Math.max(rawScrollTop, 0), maxScrollTop);
     scrollContainer.scrollTop = nextScrollTop;
   }
 
@@ -2898,6 +3114,10 @@
         background: rgba(239, 68, 68, 0.45);
       }
 
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .mine::before {
+        background: rgba(20, 184, 166, 0.72);
+      }
+
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .past::before {
         background: rgba(148, 163, 184, 0.7);
       }
@@ -2911,7 +3131,7 @@
         height: 2px;
         border: none;
         border-radius: 999px;
-        background: rgba(15, 23, 42, 0.92);
+        background: rgba(30, 64, 175, 0.96);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-body {
@@ -3088,6 +3308,7 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row {
         min-height: 8px;
+        position: relative;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-time-cell {
@@ -3121,12 +3342,21 @@
         border-top: 1px solid rgba(148, 163, 184, 0.48);
       }
 
-      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.current-time-row > * {
-        border-top: 3px solid rgba(15, 23, 42, 0.94);
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.current-time-row::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 3px;
+        background: rgba(30, 64, 175, 0.96);
+        border-radius: 999px;
+        z-index: 6;
+        pointer-events: none;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.current-time-row .zzk-map-calendar-time-cell {
-        color: #0f172a;
+        color: #1e40af;
         font-weight: 900;
         z-index: 3;
       }
@@ -3150,6 +3380,11 @@
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.busy {
         background: rgba(239, 68, 68, 0.45);
         border-color: rgba(220, 38, 38, 0.2);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.mine {
+        background: rgba(20, 184, 166, 0.82);
+        border-color: rgba(13, 148, 136, 0.65);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.past,
@@ -3579,6 +3814,734 @@
       delete linkElement.dataset.zzkOrigHref;
       delete linkElement.dataset.zzkOrigRel;
     });
+  }
+
+  function popupDebug(...args) {
+    console.debug('[ZZK Content]', ...args);
+  }
+
+
+  function registerPopupMessageBridge() {
+    if (state.popupMessageBridgeRegistered) {
+      popupDebug('popup bridge already registered');
+      return;
+    }
+    state.popupMessageBridgeRegistered = true;
+
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) {
+      popupDebug('chrome.runtime.onMessage unavailable');
+      return;
+    }
+
+    popupDebug('register popup message bridge');
+
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type !== 'ZZK_POPUP_FETCH_MY_RESERVATIONS') {
+        return false;
+      }
+
+      popupDebug('bridge message received', {
+        type: message?.type,
+        hasPayload: Boolean(message?.payload),
+      });
+
+      fetchMyReservationsForPopup(message.payload)
+        .then((data) => {
+          popupDebug('bridge response success', { itemCount: Array.isArray(data?.items) ? data.items.length : -1 });
+          sendResponse({ ok: true, data });
+        })
+        .catch((error) => {
+          popupDebug('bridge response error', getErrorMessage(error));
+          sendResponse({ ok: false, error: getErrorMessage(error) });
+        });
+
+      return true;
+    });
+  }
+
+  async function fetchMyReservationsForPopup(payload) {
+    const page = popupSanitizePage(payload?.page);
+    const endpoint =
+      'https://k8s.zzimkkong.com/api/guests/reservations?' + new URLSearchParams({ page: String(page) }).toString();
+
+    popupDebug('fetchMyReservationsForPopup start', { page, endpoint });
+
+    const requestReservations = async (authorizationHeader = '') => {
+      const headers = {
+        Accept: '*/*',
+      };
+
+      popupDebug('requestReservations attempt', { hasAuthorization: Boolean(authorizationHeader) });
+
+      if (authorizationHeader) {
+        headers.Authorization = authorizationHeader;
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        credentials: 'omit',
+        headers,
+      });
+
+      const text = await response.text();
+      const parsed = popupSafeParseJsonText(text);
+
+      popupDebug('requestReservations response', {
+        status: response.status,
+        ok: response.ok,
+        bodyKeys: Object.keys(parsed || {}),
+      });
+
+      return {
+        response,
+        data: parsed,
+      };
+    };
+
+    const authHeaderCandidates = popupResolveAuthorizationHeaderValues();
+    popupDebug('authorization header candidates', { count: authHeaderCandidates.length });
+
+    const requestAttemptHeaders = authHeaderCandidates.length > 0 ? authHeaderCandidates : [''];
+
+    let response;
+    let data;
+
+    try {
+      ({ response, data } = await requestReservations(requestAttemptHeaders[0]));
+    } catch (error) {
+      if (!isPopupNetworkFetchError(getErrorMessage(error))) {
+        throw error;
+      }
+
+      popupDebug('direct fetch failed; trying page context fallback');
+      const fallback = await popupRequestReservationsInPageContext(endpoint, authHeaderCandidates);
+      if (fallback?.ok) {
+        popupDebug('page context fallback success');
+        return popupBuildReservationPayload(fallback.data, page);
+      }
+
+      const fallbackErrorMessage =
+        typeof fallback?.error === 'string' && fallback.error.trim() !== '' ? fallback.error : getErrorMessage(error);
+      popupDebug('page context fallback error', fallbackErrorMessage);
+      throw new Error(fallbackErrorMessage);
+    }
+
+    if (!response.ok && (response.status === 401 || response.status === 403)) {
+      popupDebug(response.status + ' received; retry with authorization candidates');
+      for (const authHeaderValue of requestAttemptHeaders.slice(1)) {
+        ({ response, data } = await requestReservations(authHeaderValue));
+        popupDebug('retry result', { status: response.status, ok: response.ok });
+        if (response.ok || (response.status !== 401 && response.status !== 403)) {
+          break;
+        }
+      }
+    }
+
+    if (!response.ok) {
+      popupDebug('response not ok after retries', { status: response.status });
+      const fallback = await popupRequestReservationsInPageContext(endpoint, authHeaderCandidates);
+      if (fallback?.ok) {
+        return popupBuildReservationPayload(fallback.data, page);
+      }
+
+      const fallbackErrorMessage = typeof fallback?.error === 'string' ? fallback.error.trim() : '';
+      const message =
+        fallbackErrorMessage ||
+        (typeof data?.message === 'string' ? data.message : '요청 실패 (' + response.status + ')');
+      throw new Error(message);
+    }
+
+    popupDebug('fetchMyReservationsForPopup success via content fetch', {
+      itemCount: Array.isArray(data?.data) ? data.data.length : Array.isArray(data?.items) ? data.items.length : -1,
+    });
+    return popupBuildReservationPayload(data, page);
+  }
+
+  function popupSanitizePage(value) {
+    const page = Number(value);
+    if (!Number.isInteger(page) || page < 0) {
+      return 0;
+    }
+    return page;
+  }
+
+  function popupSafeParseJsonText(text) {
+    if (!text) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {};
+    }
+  }
+
+  function isPopupNetworkFetchError(message) {
+    if (typeof message !== 'string') {
+      return false;
+    }
+
+    const normalizedMessage = message.toLowerCase();
+    return (
+      normalizedMessage.includes('failed to fetch') ||
+      normalizedMessage.includes('networkerror') ||
+      normalizedMessage.includes('load failed') ||
+      normalizedMessage.includes('fetch to fail')
+    );
+  }
+
+  function popupBuildReservationPayload(data, page) {
+    const items = popupExtractReservationItems(data)
+      .map((reservation) => popupNormalizeReservation(reservation))
+      .filter((reservation) => reservation != null)
+      .sort((a, b) => a.startTimestamp - b.startTimestamp);
+
+    return {
+      items,
+      pagination: popupExtractReservationPagination(data, page, items.length),
+    };
+  }
+
+  function popupRequestReservationsInPageContext(endpoint, authorizationHeaders) {
+    popupDebug('popupRequestReservationsInPageContext start', {
+      endpoint,
+      authHeaderCount: Array.isArray(authorizationHeaders) ? authorizationHeaders.length : 0,
+    });
+    const requestType = 'ZZK_PAGE_BRIDGE_FETCH_MY_RESERVATIONS';
+    const responseType = 'ZZK_PAGE_BRIDGE_FETCH_MY_RESERVATIONS_RESULT';
+    const requestId = 'zzk-popup-fetch-' + String(Date.now()) + '-' + Math.random().toString(16).slice(2, 10);
+
+    const normalizedAuthHeaders = Array.isArray(authorizationHeaders)
+      ? authorizationHeaders.filter((value) => typeof value === 'string' && value.trim() !== '')
+      : [];
+
+    return new Promise((resolve) => {
+      let timerId = null;
+
+      const cleanup = () => {
+        window.removeEventListener('message', handleResponse);
+        if (timerId != null) {
+          window.clearTimeout(timerId);
+        }
+      };
+
+      const handleResponse = (event) => {
+        if (event.source !== window) {
+          return;
+        }
+
+        const message = event.data;
+        if (!message || message.type !== responseType || message.requestId !== requestId) {
+          return;
+        }
+
+        popupDebug('page bridge response', {
+          requestId,
+          ok: Boolean(message?.ok),
+          error: message?.error || '',
+          hasData: Boolean(message?.data),
+        });
+
+        cleanup();
+
+        if (message.ok) {
+          resolve({
+            ok: true,
+            data: message.data,
+          });
+          return;
+        }
+
+        resolve({
+          ok: false,
+          error:
+            typeof message.error === 'string' && message.error.trim() !== ''
+              ? message.error
+              : '페이지 컨텍스트 요청 실패',
+        });
+      };
+
+      window.addEventListener('message', handleResponse);
+
+      popupDebug('postMessage to page bridge', { requestId, authHeaderCount: normalizedAuthHeaders.length });
+
+      window.postMessage(
+        {
+          type: requestType,
+          requestId,
+          endpoint,
+          authorizationHeaders: normalizedAuthHeaders,
+        },
+        '*'
+      );
+
+      timerId = window.setTimeout(() => {
+        popupDebug('page bridge timeout', { requestId });
+        cleanup();
+        resolve({
+          ok: false,
+          error: '페이지 컨텍스트 요청 시간이 초과되었습니다.',
+        });
+      }, 9000);
+    });
+  }
+
+  function popupExtractReservationItems(data) {
+    const candidates = [
+      data?.reservations,
+      data?.content,
+      data?.items,
+      data?.data,
+      data?.data?.reservations,
+      data?.data?.content,
+      data?.data?.items,
+      data?.result,
+      data?.result?.reservations,
+      data?.result?.content,
+      data?.result?.items,
+      data?.page?.content,
+      data?.reservationPage?.content,
+      Array.isArray(data) ? data : null,
+    ];
+
+    const matchedItems = candidates.find((candidate) => Array.isArray(candidate)) || [];
+    return matchedItems.map((item) => popupUnwrapReservationItem(item)).filter((item) => item != null);
+  }
+
+  function popupUnwrapReservationItem(item) {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const nested =
+      item.reservation || item.booking || item.data || item.item || item.result || item.payload || item.content;
+
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return nested;
+    }
+
+    return item;
+  }
+
+  function popupExtractReservationPagination(data, fallbackPage, itemCount) {
+    const page =
+      popupToNonNegativeInteger(data?.number) ??
+      popupToNonNegativeInteger(data?.pageNumber) ??
+      popupToNonNegativeInteger(data?.page?.number) ??
+      fallbackPage;
+
+    const totalPages =
+      popupToNonNegativeInteger(data?.totalPages) ?? popupToNonNegativeInteger(data?.page?.totalPages) ?? null;
+
+    const totalElements =
+      popupToNonNegativeInteger(data?.totalElements) ??
+      popupToNonNegativeInteger(data?.page?.totalElements) ??
+      popupToNonNegativeInteger(data?.count) ??
+      itemCount;
+
+    let hasNext = false;
+    if (typeof data?.last === 'boolean') {
+      hasNext = !data.last;
+    } else if (typeof data?.page?.last === 'boolean') {
+      hasNext = !data.page.last;
+    } else if (Number.isInteger(totalPages)) {
+      hasNext = page + 1 < totalPages;
+    }
+
+    return {
+      page,
+      totalPages,
+      totalElements,
+      hasNext,
+    };
+  }
+
+  function popupToNonNegativeInteger(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0) {
+      return null;
+    }
+    return number;
+  }
+
+  function popupNormalizeReservation(reservation) {
+    const target = popupUnwrapReservationItem(reservation);
+    if (!target || typeof target !== 'object') {
+      return null;
+    }
+
+    const startDateTime = popupPickFirstString([
+      target.startDateTime,
+      target.reservationStartDateTime,
+      target.startDatetime,
+      target.startTime,
+      target.startedAt,
+      target.startAt,
+      target.reservationStartAt,
+    ]);
+
+    const endDateTime = popupPickFirstString([
+      target.endDateTime,
+      target.reservationEndDateTime,
+      target.endDatetime,
+      target.endTime,
+      target.endedAt,
+      target.endAt,
+      target.reservationEndAt,
+    ]);
+
+    const roomName =
+      popupPickFirstString([target.spaceName, target.space?.name, target.roomName, target.room?.name, target.name]) ||
+      '공간 미확인';
+
+    const mapName = popupPickFirstString([
+      target.mapName,
+      target.map?.name,
+      target.placeName,
+      target.sharingMapName,
+      target.sharingMap?.mapName,
+    ]);
+
+    const purpose = popupPickFirstString([
+      target.description,
+      target.purpose,
+      target.usePurpose,
+      target.content,
+      target.memo,
+      target.note,
+    ]);
+
+    const status = popupPickFirstString([target.status, target.reservationStatus, target.state]) || '예약';
+
+    const roomId = popupToNullableInteger(target.spaceId ?? target.roomId ?? target.space?.id ?? target.room?.id);
+
+    const reserverName =
+      popupPickFirstString([
+        target.name,
+        target.memberName,
+        target.userName,
+        target.reserverName,
+        target.ownerName,
+        target.member?.name,
+      ]) || '미확인';
+
+    const startTimestamp = popupToTimestamp(startDateTime);
+    const endTimestamp = popupToTimestamp(endDateTime);
+    const startDateKey = popupTimestampToKstDateKey(startTimestamp);
+    const startMinute = popupTimestampToKstMinuteOfDay(startTimestamp);
+    const endMinute = popupTimestampToKstMinuteOfDay(endTimestamp);
+
+    const dateLabel = Number.isFinite(startTimestamp) ? popupFormatKstDate(startDateTime) : '날짜 미확인';
+    let timeLabel = '시간 미확인';
+    if (Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp)) {
+      timeLabel = popupFormatKstTime(startDateTime) + ' ~ ' + popupFormatKstTime(endDateTime);
+    } else if (Number.isFinite(startTimestamp)) {
+      timeLabel = popupFormatKstTime(startDateTime) + ' 시작';
+    }
+
+    const idCandidates = [target.id, target.reservationId, target.bookingId];
+    const id = idCandidates.find((value) => Number.isInteger(Number(value)));
+
+    return {
+      id: Number.isInteger(Number(id)) ? Number(id) : null,
+      roomId,
+      roomName,
+      mapName: mapName || '',
+      purpose: purpose || '',
+      reserverName,
+      status,
+      startDateKey,
+      startMinute,
+      endMinute,
+      dateLabel,
+      timeLabel,
+      isPast: Number.isFinite(endTimestamp) ? endTimestamp < Date.now() : false,
+      startTimestamp: Number.isFinite(startTimestamp) ? startTimestamp : Number.MAX_SAFE_INTEGER,
+    };
+  }
+
+  function popupPickFirstString(values) {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim() !== '') {
+        return value.trim();
+      }
+    }
+    return '';
+  }
+
+  function popupFormatKstDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '날짜 미확인';
+    }
+
+    const parts = KST_DATE_PARTS_FORMATTER.formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '----';
+    const month = parts.find((part) => part.type === 'month')?.value || '--';
+    const day = parts.find((part) => part.type === 'day')?.value || '--';
+    const weekday = KST_WEEKDAY_FORMATTER.format(date);
+
+    return year + '-' + month + '-' + day + ' (' + weekday + ')';
+  }
+
+  function popupFormatKstTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '--:--';
+    }
+
+    const parts = KST_HOUR_MINUTE_PARTS_FORMATTER.formatToParts(date);
+    const hour = parts.find((part) => part.type === 'hour')?.value || '--';
+    const minute = parts.find((part) => part.type === 'minute')?.value || '--';
+    return hour + ':' + minute;
+  }
+
+  function popupToTimestamp(value) {
+    if (typeof value !== 'string' || value.trim() === '') {
+      return Number.NaN;
+    }
+
+    const date = new Date(value);
+    const timestamp = date.getTime();
+    return Number.isFinite(timestamp) ? timestamp : Number.NaN;
+  }
+
+  function popupToNullableInteger(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number)) {
+      return null;
+    }
+    return number;
+  }
+
+  function popupTimestampToKstDateKey(timestamp) {
+    if (!Number.isFinite(timestamp)) {
+      return '';
+    }
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const parts = KST_DATE_PARTS_FORMATTER.formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '';
+    const month = parts.find((part) => part.type === 'month')?.value || '';
+    const day = parts.find((part) => part.type === 'day')?.value || '';
+
+    if (!year || !month || !day) {
+      return '';
+    }
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function popupTimestampToKstMinuteOfDay(timestamp) {
+    if (!Number.isFinite(timestamp)) {
+      return null;
+    }
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    const parts = KST_HOUR_MINUTE_PARTS_FORMATTER.formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+      return null;
+    }
+
+    return hour * 60 + minute;
+  }
+
+  function popupResolveAuthorizationHeaderValues() {
+    const uniqueHeaders = new Set();
+    popupDebug('collect authorization header candidates start');
+    const rawCandidates = [];
+
+    try {
+      popupCollectStorageTokenCandidates(window.localStorage, rawCandidates);
+    } catch {
+      // localStorage 접근 실패 시 무시
+    }
+
+    try {
+      popupCollectStorageTokenCandidates(window.sessionStorage, rawCandidates);
+    } catch {
+      // sessionStorage 접근 실패 시 무시
+    }
+
+    for (const rawCandidate of rawCandidates) {
+      const normalized = popupNormalizeAuthorizationCandidate(rawCandidate);
+      if (normalized) {
+        uniqueHeaders.add(normalized);
+      }
+    }
+
+    const resolved = Array.from(uniqueHeaders);
+    popupDebug('collect authorization header candidates done', { count: resolved.length });
+    return resolved;
+  }
+
+  function popupCollectStorageTokenCandidates(storage, out) {
+    if (!storage || typeof storage.getItem !== 'function') {
+      return;
+    }
+
+    const commonKeys = [
+      'accessToken',
+      'token',
+      'authToken',
+      'authorization',
+      'Authorization',
+      'jwt',
+      'zzimkkongToken',
+      'idToken',
+    ];
+
+    commonKeys.forEach((key) => {
+      const value = storage.getItem(key);
+      if (typeof value === 'string' && value.trim() !== '') {
+        out.push(value.trim());
+      }
+    });
+
+    const keyLength = Number.isInteger(storage.length) ? storage.length : 0;
+    for (let index = 0; index < keyLength; index += 1) {
+      const key = storage.key(index);
+      if (typeof key !== 'string') {
+        continue;
+      }
+
+      const value = storage.getItem(key);
+      if (typeof value !== 'string' || value.trim() === '') {
+        continue;
+      }
+
+      if (/token|auth|jwt|session|persist/i.test(key)) {
+        out.push(value.trim());
+      }
+
+      const extracted = popupExtractTokenLikeStrings(value);
+      extracted.forEach((candidate) => {
+        out.push(candidate);
+      });
+    }
+  }
+
+  function popupExtractTokenLikeStrings(source) {
+    if (typeof source !== 'string' || source.trim() === '') {
+      return [];
+    }
+
+    const unique = new Set();
+
+    const bearerMatches = source.match(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi);
+    if (Array.isArray(bearerMatches)) {
+      bearerMatches.forEach((match) => {
+        const trimmed = match.trim();
+        if (trimmed) {
+          unique.add(trimmed);
+        }
+      });
+    }
+
+    const jwtMatches = source.match(/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g);
+    if (Array.isArray(jwtMatches)) {
+      jwtMatches.forEach((match) => {
+        const trimmed = match.trim();
+        if (trimmed) {
+          unique.add(trimmed);
+        }
+      });
+    }
+
+    return Array.from(unique);
+  }
+
+  function popupNormalizeAuthorizationCandidate(rawCandidate) {
+    if (typeof rawCandidate !== 'string' || rawCandidate.trim() === '') {
+      return '';
+    }
+
+    const normalizedCandidates = [];
+    const pushCandidate = (value) => {
+      if (typeof value === 'string' && value.trim() !== '') {
+        normalizedCandidates.push(value.trim());
+      }
+    };
+
+    const collectNested = (value, depth = 0) => {
+      if (depth > 4 || value == null) {
+        return;
+      }
+
+      if (typeof value === 'string') {
+        pushCandidate(value);
+        popupExtractTokenLikeStrings(value).forEach(pushCandidate);
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.slice(0, 30).forEach((item) => collectNested(item, depth + 1));
+        return;
+      }
+
+      if (typeof value === 'object') {
+        const objectValue = value;
+        const directKeys = [
+          'accessToken',
+          'token',
+          'authToken',
+          'authorization',
+          'Authorization',
+          'jwt',
+          'idToken',
+          'value',
+        ];
+
+        directKeys.forEach((key) => {
+          if (key in objectValue) {
+            collectNested(objectValue[key], depth + 1);
+          }
+        });
+
+        const entries = Object.entries(objectValue);
+        entries.slice(0, 50).forEach(([key, nestedValue]) => {
+          if (/token|auth|jwt|session|persist/i.test(key) || depth < 2) {
+            collectNested(nestedValue, depth + 1);
+          }
+        });
+      }
+    };
+
+    pushCandidate(rawCandidate);
+    popupExtractTokenLikeStrings(rawCandidate).forEach(pushCandidate);
+
+    try {
+      collectNested(JSON.parse(rawCandidate));
+    } catch {
+      // JSON 형태가 아니면 무시
+    }
+
+    for (const candidate of normalizedCandidates) {
+      const token = candidate.trim().replace(/^"|"$/g, '');
+      if (!token) {
+        continue;
+      }
+      if (/^Bearer\s+/i.test(token)) {
+        return token;
+      }
+      if (token.split('.').length === 3 || token.length >= 24) {
+        return 'Bearer ' + token;
+      }
+    }
+
+    return '';
   }
 
   function getExtensionIconUrl() {

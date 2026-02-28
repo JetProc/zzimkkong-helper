@@ -28,6 +28,10 @@ const KST_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   month: '2-digit',
   day: '2-digit',
 });
+const KST_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: KST_TIMEZONE,
+  weekday: 'short',
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'ZZK_FETCH_AVAILABILITY') {
@@ -43,6 +47,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === 'ZZK_FETCH_DAILY_SCHEDULE') {
     loadDailySchedule(message.payload)
+      .then((data) => {
+        sendResponse({ ok: true, data });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: getErrorMessage(error) });
+      });
+    return true;
+  }
+
+  if (message?.type === 'ZZK_FETCH_MY_RESERVATIONS') {
+    loadMyReservations(message.payload)
       .then((data) => {
         sendResponse({ ok: true, data });
       })
@@ -148,6 +163,183 @@ async function loadDailySchedule(payload) {
   };
 }
 
+async function loadMyReservations(payload) {
+  const page = sanitizePage(payload?.page);
+  const endpoint =
+    API_BASE_URL + '/api/guests/reservations?' + new URLSearchParams({ page: String(page) }).toString();
+
+  const response = await fetchJson(endpoint, {
+    credentials: 'include',
+  });
+
+  const items = extractReservationItems(response)
+    .map((reservation) => normalizeMyReservation(reservation))
+    .filter((reservation) => reservation != null)
+    .sort((a, b) => a.startTimestamp - b.startTimestamp);
+
+  return {
+    items,
+    pagination: extractReservationPagination(response, page, items.length),
+  };
+}
+
+function sanitizePage(value) {
+  const page = Number(value);
+  if (!Number.isInteger(page) || page < 0) {
+    return 0;
+  }
+  return page;
+}
+
+function extractReservationItems(response) {
+  const candidates = [
+    response?.reservations,
+    response?.content,
+    response?.data,
+    response?.items,
+    Array.isArray(response) ? response : null,
+  ];
+
+  return candidates.find((candidate) => Array.isArray(candidate)) || [];
+}
+
+function extractReservationPagination(response, fallbackPage, itemCount) {
+  const page =
+    toNonNegativeInteger(response?.number) ??
+    toNonNegativeInteger(response?.pageNumber) ??
+    toNonNegativeInteger(response?.page?.number) ??
+    fallbackPage;
+
+  const totalPages =
+    toNonNegativeInteger(response?.totalPages) ?? toNonNegativeInteger(response?.page?.totalPages) ?? null;
+
+  const totalElements =
+    toNonNegativeInteger(response?.totalElements) ??
+    toNonNegativeInteger(response?.page?.totalElements) ??
+    toNonNegativeInteger(response?.count) ??
+    itemCount;
+
+  let hasNext = false;
+  if (typeof response?.last === 'boolean') {
+    hasNext = !response.last;
+  } else if (typeof response?.page?.last === 'boolean') {
+    hasNext = !response.page.last;
+  } else if (Number.isInteger(totalPages)) {
+    hasNext = page + 1 < totalPages;
+  }
+
+  return {
+    page,
+    totalPages,
+    totalElements,
+    hasNext,
+  };
+}
+
+function toNonNegativeInteger(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    return null;
+  }
+  return number;
+}
+
+function normalizeMyReservation(reservation) {
+  if (!reservation || typeof reservation !== 'object') {
+    return null;
+  }
+
+  const startDateTime = pickFirstString([
+    reservation.startDateTime,
+    reservation.reservationStartDateTime,
+    reservation.startDatetime,
+    reservation.startTime,
+  ]);
+
+  const endDateTime = pickFirstString([
+    reservation.endDateTime,
+    reservation.reservationEndDateTime,
+    reservation.endDatetime,
+    reservation.endTime,
+  ]);
+
+  const roomName =
+    pickFirstString([reservation.spaceName, reservation.space?.name, reservation.roomName, reservation.name]) ||
+    '공간 미확인';
+
+  const mapName = pickFirstString([reservation.mapName, reservation.map?.name, reservation.placeName]);
+  const purpose = pickFirstString([
+    reservation.description,
+    reservation.purpose,
+    reservation.usePurpose,
+    reservation.content,
+  ]);
+  const status = pickFirstString([reservation.status, reservation.reservationStatus, reservation.state]) || '예약';
+
+  const startTimestamp = toTimestamp(startDateTime);
+  const endTimestamp = toTimestamp(endDateTime);
+
+  const dateLabel = Number.isFinite(startTimestamp) ? formatKstDate(startDateTime) : '날짜 미확인';
+  let timeLabel = '시간 미확인';
+  if (Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp)) {
+    timeLabel = formatKstTime(startDateTime) + ' ~ ' + formatKstTime(endDateTime);
+  } else if (Number.isFinite(startTimestamp)) {
+    timeLabel = formatKstTime(startDateTime) + ' 시작';
+  }
+
+  return {
+    id: Number.isInteger(Number(reservation.id)) ? Number(reservation.id) : null,
+    roomName,
+    mapName: mapName || '',
+    purpose: purpose || '',
+    status,
+    dateLabel,
+    timeLabel,
+    isPast: Number.isFinite(endTimestamp) ? endTimestamp < Date.now() : false,
+    startTimestamp: Number.isFinite(startTimestamp) ? startTimestamp : Number.MAX_SAFE_INTEGER,
+  };
+}
+
+function pickFirstString(values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
+function formatKstDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '날짜 미확인';
+  }
+
+  const parts = KST_DATE_FORMATTER.formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value || '----';
+  const month = parts.find((part) => part.type === 'month')?.value || '--';
+  const day = parts.find((part) => part.type === 'day')?.value || '--';
+  const weekday = KST_WEEKDAY_FORMATTER.format(date);
+  return year + '-' + month + '-' + day + ' (' + weekday + ')';
+}
+
+function formatKstTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '--:--';
+  }
+  return KST_HOUR_MINUTE_FORMATTER.format(date);
+}
+
+function toTimestamp(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return Number.NaN;
+  }
+
+  const date = new Date(value);
+  const timestamp = date.getTime();
+  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
+}
 async function loadMapContext(payload) {
   const sharingMapId = sanitizeSharingMapId(payload?.sharingMapId);
 
@@ -364,11 +556,15 @@ function normalizeSpaces(spacesResponse) {
   return [];
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, requestInit = {}) {
+  const headers = {
+    accept: 'application/json',
+    ...(requestInit && requestInit.headers && typeof requestInit.headers === 'object' ? requestInit.headers : {}),
+  };
+
   const response = await fetch(url, {
-    headers: {
-      accept: 'application/json',
-    },
+    ...requestInit,
+    headers,
   });
 
   const text = await response.text();
