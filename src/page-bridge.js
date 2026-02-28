@@ -4,10 +4,7 @@
   }
   window.__zzkPopupPageBridgeLoaded = true;
 
-  const BRIDGE_LOG_PREFIX = '[ZZK PageBridge]';
-  const debug = (...args) => {
-    console.debug(BRIDGE_LOG_PREFIX, ...args);
-  };
+  const debug = () => {};
 
   const REQUEST_TYPE = 'ZZK_PAGE_BRIDGE_FETCH_MY_RESERVATIONS';
   const RESPONSE_TYPE = 'ZZK_PAGE_BRIDGE_FETCH_MY_RESERVATIONS_RESULT';

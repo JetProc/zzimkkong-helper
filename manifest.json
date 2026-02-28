@@ -22,7 +22,9 @@
     {
       "matches": [
         "https://zzimkkong.com/guest/*",
-        "https://zzimkkong.com/guest"
+        "https://zzimkkong.com/guest",
+        "https://www.zzimkkong.com/guest/*",
+        "https://www.zzimkkong.com/guest"
       ],
       "css": [
         "src/vendor/toastify-js/toastify.min.css"
@@ -36,7 +38,9 @@
     {
       "matches": [
         "https://zzimkkong.com/guest/*",
-        "https://zzimkkong.com/guest"
+        "https://zzimkkong.com/guest",
+        "https://www.zzimkkong.com/guest/*",
+        "https://www.zzimkkong.com/guest"
       ],
       "js": [
         "src/page-bridge.js"
@@ -52,12 +56,14 @@
         "src/fonts/BMDOHYEON_ttf.ttf"
       ],
       "matches": [
-        "https://zzimkkong.com/*"
+        "https://zzimkkong.com/*",
+        "https://www.zzimkkong.com/*"
       ]
     }
   ],
   "host_permissions": [
     "https://zzimkkong.com/*",
-    "https://k8s.zzimkkong.com/*"
+    "https://k8s.zzimkkong.com/*",
+    "https://www.zzimkkong.com/*"
   ]
 }

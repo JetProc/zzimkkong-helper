@@ -572,6 +572,45 @@
     return unique;
   }
 
+  function clearMapCalendarHoverPreview(container) {
+    const root = container instanceof HTMLElement ? container : document.getElementById(MAP_CALENDAR_OVERLAY_ID);
+    if (!(root instanceof HTMLElement)) {
+      return;
+    }
+
+    root.querySelectorAll('.zzk-map-calendar-slot.hoverpick').forEach((element) => {
+      element.classList.remove('hoverpick');
+    });
+  }
+
+  function setMapCalendarHoverPreview(container, roomId, startMinute) {
+    const root = container instanceof HTMLElement ? container : document.getElementById(MAP_CALENDAR_OVERLAY_ID);
+    if (!(root instanceof HTMLElement) || !Number.isInteger(roomId) || !Number.isInteger(startMinute)) {
+      return;
+    }
+
+    clearMapCalendarHoverPreview(root);
+
+    const previewEndMinute = startMinute + AUTO_PICK_DURATION_MINUTES;
+    const selector = '.zzk-map-calendar-slot[data-room-id="' + roomId + '"]';
+
+    root.querySelectorAll(selector).forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+
+      const slotStartMinute = Number(element.dataset.startMinute);
+      const slotEndMinute = Number(element.dataset.endMinute);
+      if (!Number.isFinite(slotStartMinute) || !Number.isFinite(slotEndMinute)) {
+        return;
+      }
+
+      if (slotStartMinute < previewEndMinute && slotEndMinute > startMinute) {
+        element.classList.add('hoverpick');
+      }
+    });
+  }
+
   function renderMapCalendarOverlay(scheduleData) {
     if (!state.scheduleOverlayEnabled) {
       removeMapCalendarOverlay();
@@ -627,6 +666,33 @@
     const todayDate = getTodayDateInKST();
     const isTodaySchedule = scheduleDate === todayDate;
     const currentMinute = isTodaySchedule ? getCurrentMinuteInKST() : null;
+    const timelineStartMinute = Number.isInteger(timeline?.[0]?.startMinute) ? timeline[0].startMinute : null;
+    const timelineEndMinute = Number.isInteger(timeline?.[timeline.length - 1]?.endMinute)
+      ? timeline[timeline.length - 1].endMinute
+      : null;
+    const currentMinuteForLine =
+      Number.isInteger(currentMinute) && Number.isInteger(timelineStartMinute) && Number.isInteger(timelineEndMinute)
+        ? Math.min(Math.max(currentMinute, timelineStartMinute), Math.max(timelineEndMinute - 1, timelineStartMinute))
+        : currentMinute;
+    const fallbackCurrentMinute = isTodaySchedule ? new Date().getHours() * 60 + new Date().getMinutes() : null;
+    const effectiveCurrentMinuteForLine = Number.isInteger(currentMinuteForLine)
+      ? currentMinuteForLine
+      : fallbackCurrentMinute;
+
+    if (isMapCalendarDebugEnabled()) {
+      popupDebug('[line-debug] timeline-context', {
+        scheduleDate,
+        todayDate,
+        isTodaySchedule,
+        currentMinute,
+        currentMinuteForLine,
+        effectiveCurrentMinuteForLine,
+        timelineStartMinute,
+        timelineEndMinute,
+        timelineLength: timeline.length,
+      });
+    }
+
     const activeAutoPickedRange =
       state.autoPickedRange && state.autoPickedRange.date === scheduleData.date ? state.autoPickedRange : null;
     const myReservationsByRoom = buildMyReservationsByRoomForDate(scheduleDate);
@@ -760,7 +826,7 @@
 
     const clickGuide = document.createElement('small');
     clickGuide.className = 'zzk-map-calendar-guide';
-    clickGuide.textContent = '⏱️ 회색은 지난 시간이라 선택되지 않아요. 하늘색은 방금 선택한 1시간, 청록색은 내 예약입니다.';
+    clickGuide.textContent = '⏱️ 회색은 지난 시간, 청록색은 내 예약입니다.';
     titleControls.appendChild(clickGuide);
 
     const legend = document.createElement('div');
@@ -887,7 +953,9 @@
         slotRow.classList.add('half-hour-boundary');
       }
       const isCurrentTimeRow =
-        Number.isInteger(currentMinute) && currentMinute >= slot.startMinute && currentMinute < slot.endMinute;
+        Number.isInteger(effectiveCurrentMinuteForLine) &&
+        effectiveCurrentMinuteForLine >= slot.startMinute &&
+        effectiveCurrentMinuteForLine < slot.endMinute;
       if (isCurrentTimeRow) {
         slotRow.classList.add('current-time-row');
         currentSlotRowElement = slotRow;
@@ -903,6 +971,9 @@
       flatRooms.forEach((room, roomIndex) => {
         const slotElement = document.createElement('div');
         slotElement.className = 'zzk-map-calendar-slot';
+        slotElement.dataset.roomId = Number.isInteger(room?.id) ? String(room.id) : '';
+        slotElement.dataset.startMinute = String(slot.startMinute);
+        slotElement.dataset.endMinute = String(slot.endMinute);
         if (roomIndex !== 0 && floorStartIndexes.has(roomIndex)) {
           slotElement.classList.add('floor-start');
         }
@@ -958,12 +1029,26 @@
               'aria-label',
               `${room.name} ${slot.label} 슬롯 비어 있음. 클릭하면 이후 1시간 자동 선택`
             );
+            const clearHoverPreview = () => {
+              clearMapCalendarHoverPreview(overlay);
+            };
+            const previewHoverRange = () => {
+              setMapCalendarHoverPreview(overlay, room.id, slot.startMinute);
+            };
+
+            slotElement.addEventListener('mouseenter', previewHoverRange);
+            slotElement.addEventListener('mouseleave', clearHoverPreview);
+            slotElement.addEventListener('focus', previewHoverRange);
+            slotElement.addEventListener('blur', clearHoverPreview);
+
             slotElement.addEventListener('click', () => {
+              clearHoverPreview();
               handleFreeSlotClick(scheduleData, room, slot);
             });
             slotElement.addEventListener('keydown', (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
+                clearHoverPreview();
                 handleFreeSlotClick(scheduleData, room, slot);
               }
             });
@@ -1025,12 +1110,31 @@
       });
     });
 
+    if (isTodaySchedule && !currentSlotRowElement && timeline.length > 0) {
+      const fallbackRowElement =
+        Number.isInteger(effectiveCurrentMinuteForLine) &&
+        Number.isInteger(timelineEndMinute) &&
+        effectiveCurrentMinuteForLine >= timelineEndMinute
+          ? matrixBody.lastElementChild
+          : matrixBody.firstElementChild;
+
+      if (fallbackRowElement instanceof HTMLElement) {
+        fallbackRowElement.classList.add('current-time-row');
+        currentSlotRowElement = fallbackRowElement;
+      }
+    }
+
+    if (isMapCalendarDebugEnabled()) {
+      popupDebug('[line-debug] row-detection', {
+        isTodaySchedule,
+        foundCurrentRow: Boolean(currentSlotRowElement),
+        effectiveCurrentMinuteForLine,
+      });
+    }
+
     if (isTodaySchedule && currentSlotRowElement) {
       requestAnimationFrame(() => {
         scrollMapCalendarBodyToCurrentTime(body, currentSlotRowElement);
-        requestAnimationFrame(() => {
-          scrollMapCalendarBodyToCurrentTime(body, currentSlotRowElement);
-        });
       });
     }
   }
@@ -1142,10 +1246,19 @@
       return;
     }
 
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const rowRect = currentRowElement.getBoundingClientRect();
-    const rowHeight = Math.max(rowRect.height, 1);
-    const rowCenterOffset = rowRect.top - containerRect.top + scrollContainer.scrollTop + rowHeight / 2;
+    if (scrollContainer.clientHeight <= 0) {
+      return;
+    }
+
+    const scrollContainerRect = scrollContainer.getBoundingClientRect();
+    const currentRowRect = currentRowElement.getBoundingClientRect();
+    const rowHeight = Math.max(currentRowRect.height, 1);
+
+    let rowTopOffsetInContainer = currentRowRect.top - scrollContainerRect.top + scrollContainer.scrollTop;
+    if (!Number.isFinite(rowTopOffsetInContainer)) {
+      rowTopOffsetInContainer = Number.isFinite(currentRowElement.offsetTop) ? currentRowElement.offsetTop : 0;
+    }
+    const rowCenterOffset = rowTopOffsetInContainer + rowHeight / 2;
 
     const floorHeaderHeight = Math.max(
       scrollContainer.querySelector('.zzk-floor-header-row')?.getBoundingClientRect().height ?? 0,
@@ -1164,6 +1277,18 @@
     const maxScrollTop = Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0);
     const nextScrollTop = Math.min(Math.max(rawScrollTop, 0), maxScrollTop);
     scrollContainer.scrollTop = nextScrollTop;
+
+    if (isMapCalendarDebugEnabled()) {
+      popupDebug('[line-debug] scroll-target', {
+        rowTopOffsetInContainer,
+        rowHeight,
+        rowCenterOffset,
+        preferredVisualTop,
+        rawScrollTop,
+        maxScrollTop,
+        nextScrollTop,
+      });
+    }
   }
 
   function createMapCalendarDatePicker({ selectedDate, minDate, onSelect }) {
@@ -3126,6 +3251,11 @@
         background: rgba(125, 211, 252, 0.85);
       }
 
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .hoverpick::before {
+        background: rgba(56, 189, 248, 0.95);
+        border-color: rgba(2, 132, 199, 0.92);
+      }
+
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .current::before {
         width: 10px;
         height: 2px;
@@ -3401,7 +3531,13 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.clickable:hover,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.clickable:focus {
-        filter: brightness(0.9);
+        filter: brightness(0.84) saturate(1.2);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.hoverpick {
+        background: rgba(56, 189, 248, 0.92) !important;
+        border-color: rgba(2, 132, 199, 0.92) !important;
+        box-shadow: inset 0 0 0 1px rgba(3, 105, 161, 0.58);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.autopick {
@@ -3816,9 +3952,7 @@
     });
   }
 
-  function popupDebug(...args) {
-    console.debug('[ZZK Content]', ...args);
-  }
+  function popupDebug() {}
 
 
   function registerPopupMessageBridge() {
@@ -4668,6 +4802,14 @@
     }
 
     return hour * 60 + minute;
+  }
+
+  function isMapCalendarDebugEnabled() {
+    try {
+      return localStorage.getItem('zzk_helper_debug') === '1' || localStorage.getItem('zzk-helper-debug') === '1';
+    } catch {
+      return false;
+    }
   }
 
   function normalizeDateInput(inputElement) {

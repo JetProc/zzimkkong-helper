@@ -1,5 +1,4 @@
 (() => {
-  const POPUP_LOG_PREFIX = '[ZZK Popup]';
   const ROOM_FLOOR_BY_NAME = new Map([
     ['금성', '11층'],
     ['지구', '11층'],
@@ -13,9 +12,7 @@
   ]);
   const GUEST_OPEN_URL = 'https://zzimkkong.com/guest/gAjJTeISFY54CNKWYmOVxQ';
 
-  const debug = (...args) => {
-    console.debug(POPUP_LOG_PREFIX, ...args);
-  };
+  const debug = () => {};
 
   const toastTheme = {
     success: 'linear-gradient(135deg, #16a34a, #22c55e)',
@@ -43,7 +40,7 @@
       return;
     }
 
-    console.log('[ZZK Popup][ToastFallback]', message);
+    return;
   };
 
   debug('popup boot');
@@ -237,8 +234,7 @@
       notify('선택한 예약 공유 텍스트가 복사되었습니다.', 'success');
     } catch (error) {
       debug('clipboard copy failed', getErrorMessage(error));
-      notify('복사에 실패했습니다. 콘솔의 공유 텍스트를 확인해주세요.', 'error', 3200);
-      console.log('[ZZK Popup][ShareText]\n' + shareText);
+      notify('복사에 실패했습니다. 다시 시도해주세요.', 'error', 3200);
     }
   };
 
@@ -328,7 +324,6 @@
 
 async function fetchReservationsViaGuestTab(page) {
   const candidateTabs = await getCandidateGuestTabs();
-  console.debug('[ZZK Popup]', 'candidate guest tabs', candidateTabs);
 
   if (!Array.isArray(candidateTabs) || candidateTabs.length === 0) {
     throw new Error('찜꽁 게스트 페이지(https://zzimkkong.com/guest)를 먼저 열어주세요.');
@@ -343,23 +338,11 @@ async function fetchReservationsViaGuestTab(page) {
     }
 
     try {
-      console.debug('[ZZK Popup]', 'send message to tab', {
-        tabId: tab.id,
-        url: tab.url,
-        active: Boolean(tab.active),
-      });
-
       const response = await sendMessageToTab(tab.id, {
         type: 'ZZK_POPUP_FETCH_MY_RESERVATIONS',
         payload: {
           page,
         },
-      });
-
-      console.debug('[ZZK Popup]', 'tab response', {
-        tabId: tab.id,
-        ok: Boolean(response?.ok),
-        error: response?.error || '',
       });
 
       if (response?.ok) {
@@ -371,7 +354,6 @@ async function fetchReservationsViaGuestTab(page) {
       }
     } catch (error) {
       const message = getErrorMessage(error);
-      console.debug('[ZZK Popup]', 'tab message error', { tabId: tab.id, message });
       if (isNoReceiverError(error)) {
         hadNoReceiverError = true;
         continue;
