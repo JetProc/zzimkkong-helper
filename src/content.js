@@ -26,6 +26,7 @@
   });
   const TIME_STEP_MINUTES = 10;
   const AUTO_PICK_DURATION_MINUTES = 60;
+  const AUTO_PICK_DURATION_OPTIONS = [10, 20, 30, 40, 50, 60];
   const MATRIX_TIME_COLUMN_WIDTH_PX = 52;
   const MATRIX_ROOM_COLUMN_MIN_WIDTH_PX = 30;
   const CURRENT_TIME_INITIAL_TOP_OFFSET_ROWS = 3;
@@ -64,6 +65,7 @@
     autoRefreshTimer: null,
     autoScheduleRefreshTimer: null,
     autoPickedRange: null,
+    autoPickDurationMinutes: AUTO_PICK_DURATION_MINUTES,
     mapCalendarManualExpanded: false,
     popupMessageBridgeRegistered: false,
     myReservationsCache: [],
@@ -591,7 +593,7 @@
 
     clearMapCalendarHoverPreview(root);
 
-    const previewEndMinute = startMinute + AUTO_PICK_DURATION_MINUTES;
+    const previewEndMinute = startMinute + getAutoPickDurationMinutes();
     const selector = '.zzk-map-calendar-slot[data-room-id="' + roomId + '"]';
 
     root.querySelectorAll(selector).forEach((element) => {
@@ -609,6 +611,64 @@
         element.classList.add('hoverpick');
       }
     });
+  }
+
+  function getAutoPickDurationMinutes() {
+    const selectedDuration = Number(state.autoPickDurationMinutes);
+    if (AUTO_PICK_DURATION_OPTIONS.includes(selectedDuration)) {
+      return selectedDuration;
+    }
+    return AUTO_PICK_DURATION_MINUTES;
+  }
+
+  function getAutoPickDurationLabel(durationMinutes) {
+    const minutes = Number(durationMinutes);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      return '1시간';
+    }
+
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    if (hour > 0 && minute > 0) {
+      return `${hour}시간 ${minute}분`;
+    }
+    if (hour > 0) {
+      return `${hour}시간`;
+    }
+    return `${minute}분`;
+  }
+
+  function createMapCalendarDurationControls(onSelect) {
+    const selectedDurationMinutes = getAutoPickDurationMinutes();
+
+    const controlRow = document.createElement('div');
+    controlRow.className = 'zzk-map-calendar-duration-controls';
+
+    const label = document.createElement('strong');
+    label.className = 'zzk-map-calendar-duration-label';
+    label.textContent = '선택 길이';
+    controlRow.appendChild(label);
+
+    AUTO_PICK_DURATION_OPTIONS.forEach((durationMinutes) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'zzk-map-calendar-duration-button';
+      if (durationMinutes === selectedDurationMinutes) {
+        button.classList.add('active');
+      }
+
+      button.textContent = getAutoPickDurationLabel(durationMinutes);
+      button.setAttribute('aria-pressed', String(durationMinutes === selectedDurationMinutes));
+      button.addEventListener('click', () => {
+        if (typeof onSelect === 'function') {
+          onSelect(durationMinutes);
+        }
+      });
+
+      controlRow.appendChild(button);
+    });
+
+    return controlRow;
   }
 
   function renderMapCalendarOverlay(scheduleData) {
@@ -774,7 +834,7 @@
     manual.innerHTML = [
       "<strong class='zzk-map-calendar-manual-title'>📘 찜꽁 Helper 사용 가이드</strong>",
       "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 <span class='zzk-map-calendar-manual-emphasis'>예약할 날짜를 먼저 고르세요</span>.</p>",
-      "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>1시간</span>이 자동 선택됩니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>기본 1시간</span>이 자동 선택됩니다. (하단 버튼으로 10분 단위 조절 가능)</p>",
       "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>청록색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
@@ -824,15 +884,29 @@
       titleControls.appendChild(controlRow);
     }
 
+    const durationControls = createMapCalendarDurationControls((nextDurationMinutes) => {
+      if (nextDurationMinutes === getAutoPickDurationMinutes()) {
+        return;
+      }
+
+      state.autoPickDurationMinutes = nextDurationMinutes;
+      state.autoPickedRange = null;
+      const targetDate = isDateString(scheduleData?.date) ? scheduleData.date : state.activeScheduleDate;
+      const nextScheduleData = targetDate && state.scheduleCache.has(targetDate) ? state.scheduleCache.get(targetDate) : scheduleData;
+      renderMapCalendarOverlay(nextScheduleData);
+      showHelperToast(`자동 선택 시간이 ${getAutoPickDurationLabel(nextDurationMinutes)}으로 변경되었습니다.`, 'info', 1800);
+    });
+    titleControls.appendChild(durationControls);
+
     const clickGuide = document.createElement('small');
     clickGuide.className = 'zzk-map-calendar-guide';
-    clickGuide.textContent = '⏱️ 회색은 지난 시간, 청록색은 내 예약입니다.';
+    clickGuide.textContent = `⏱️ 회색은 지난 시간, 청록색은 내 예약입니다. 자동 선택: ${getAutoPickDurationLabel(getAutoPickDurationMinutes())}.`;
     titleControls.appendChild(clickGuide);
 
     const legend = document.createElement('div');
     legend.className = 'zzk-map-calendar-legend';
     legend.innerHTML =
-      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="mine">내 예약</span><span class="past">지난 시간</span><span class="autopick">클릭 선택 1시간</span><span class="current">현재 시간선</span>';
+      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="mine">내 예약</span><span class="past">지난 시간</span><span class="autopick">클릭 선택 구간</span><span class="current">현재 시간선</span>';
     titleControls.appendChild(legend);
 
     const body = document.createElement('div');
@@ -942,6 +1016,8 @@
     matrixBody.className = 'zzk-map-calendar-matrix-body';
     matrix.appendChild(matrixBody);
     let currentSlotRowElement = null;
+    const autoPickDurationMinutes = getAutoPickDurationMinutes();
+    const autoPickDurationLabel = getAutoPickDurationLabel(autoPickDurationMinutes);
 
     timeline.forEach((slot) => {
       const slotRow = document.createElement('div');
@@ -999,7 +1075,7 @@
         );
         const isMyReservation = myOverlappedReservations.length > 0;
         const isPastSlot = Number.isInteger(currentMinute) && slot.startMinute < currentMinute;
-        const autoPickEndMinute = slot.startMinute + AUTO_PICK_DURATION_MINUTES;
+        const autoPickEndMinute = slot.startMinute + autoPickDurationMinutes;
         const maxBoundCandidates = [24 * 60];
         if (Number.isInteger(scheduleData?.range?.endMinute)) {
           maxBoundCandidates.push(scheduleData.range.endMinute);
@@ -1027,7 +1103,7 @@
             slotElement.setAttribute('role', 'button');
             slotElement.setAttribute(
               'aria-label',
-              `${room.name} ${slot.label} 슬롯 비어 있음. 클릭하면 이후 1시간 자동 선택`
+              `${room.name} ${slot.label} 슬롯 비어 있음. 클릭하면 이후 ${autoPickDurationLabel} 자동 선택`
             );
             const clearHoverPreview = () => {
               clearMapCalendarHoverPreview(overlay);
@@ -1101,9 +1177,9 @@
         } else if (isAutoPickOverflow) {
           slotElement.title = `${room.name} (${floorLabel}) ${minuteToHourMinute(
             slot.startMinute
-          )}~${minuteToHourMinute(autoPickEndMinute)} 구간을 확보할 수 없어 자동 선택할 수 없습니다.`;
+          )} 기준 ${autoPickDurationLabel} 구간을 확보할 수 없어 자동 선택할 수 없습니다.`;
         } else {
-          slotElement.title = `${room.name} (${floorLabel}) ${slot.label}~${slotEndLabel} 비어 있음 · 클릭하면 ${slot.label} 기준 이후 1시간 자동 선택`;
+          slotElement.title = `${room.name} (${floorLabel}) ${slot.label}~${slotEndLabel} 비어 있음 · 클릭하면 ${slot.label} 기준 이후 ${autoPickDurationLabel} 자동 선택`;
         }
 
         slotRow.appendChild(slotElement);
@@ -1555,7 +1631,6 @@
         return;
       }
 
-      setMapCalendarCollapsed(true, state.scheduleCache.get(targetDate) || scheduleData);
       showReservationSetupToast();
 
       setStatus(
@@ -1654,7 +1729,9 @@
   }
   function buildAutoPickRange(scheduleData, room, slot) {
     const startMinute = Number(slot?.startMinute);
-    const endMinute = startMinute + AUTO_PICK_DURATION_MINUTES;
+    const autoPickDurationMinutes = getAutoPickDurationMinutes();
+    const autoPickDurationLabel = getAutoPickDurationLabel(autoPickDurationMinutes);
+    const endMinute = startMinute + autoPickDurationMinutes;
     const floorLabel = getRoomFloorLabel(room);
 
     if (!Number.isInteger(endMinute) || !Number.isInteger(startMinute)) {
@@ -1699,7 +1776,7 @@
     if (endMinute > maximumAllowedMinute) {
       return {
         ok: false,
-        message: `${room.name} (${floorLabel})은(는) ${slot.label} 기준 이후 1시간을 확보할 수 없어 자동 선택할 수 없습니다.`,
+        message: `${room.name} (${floorLabel})은(는) ${slot.label} 기준 이후 ${autoPickDurationLabel}을(를) 확보할 수 없어 자동 선택할 수 없습니다.`,
       };
     }
 
@@ -2863,6 +2940,7 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-guide,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-controls,
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-duration-controls,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-manual,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-legend {
         display: none;
@@ -2975,6 +3053,46 @@
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-controls {
         display: grid;
         gap: 6px;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-controls {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-label {
+        font-size: 8.5px;
+        font-weight: 900;
+        color: #0f766e;
+        margin-right: 2px;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-button {
+        height: 22px;
+        border: 1px solid rgba(14, 116, 144, 0.28);
+        border-radius: 999px;
+        background: rgba(236, 253, 245, 0.86);
+        color: #0f766e;
+        font-size: 8.5px;
+        font-weight: 800;
+        line-height: 1;
+        padding: 0 9px;
+        cursor: pointer;
+        transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-button:hover {
+        background: rgba(187, 247, 208, 0.82);
+        border-color: rgba(5, 150, 105, 0.45);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-button.active {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        border-color: rgba(3, 105, 161, 0.76);
+        color: #f8fafc;
+        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.28);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-date-picker {
