@@ -26,8 +26,13 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "css": ["src/vendor/toastify-js/toastify.min.css"],
-      "js": ["src/vendor/toastify-js/toastify.min.js", "src/content.js"],
+      "css": [
+        "src/vendor/toastify-js/toastify.min.css"
+      ],
+      "js": [
+        "src/vendor/toastify-js/toastify.min.js",
+        "src/content.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -37,16 +42,26 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "js": ["src/page-bridge.js"],
+      "js": [
+        "src/page-bridge.js"
+      ],
       "run_at": "document_idle",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/icon.png", "src/fonts/BMDOHYEON_ttf.ttf"],
-      "matches": ["https://zzimkkong.com/*", "https://www.zzimkkong.com/*"]
+      "resources": [
+        "src/icon.png",
+        "src/fonts/BMDOHYEON_ttf.ttf"
+      ],
+      "matches": [
+        "https://zzimkkong.com/*",
+        "https://www.zzimkkong.com/*"
+      ]
     }
   ],
-  "host_permissions": ["https://zzimkkong.com/*", "https://k8s.zzimkkong.com/*", "https://www.zzimkkong.com/*"]
+  "host_permissions": [
+    "https://k8s.zzimkkong.com/*"
+  ]
 }

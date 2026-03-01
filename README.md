@@ -6,6 +6,35 @@
 - 제작: `8기 프론트엔드 파라디`
 
 ---
+## 🎯 0-1. 전용 목적 (1000자 이내)
+
+- 찜꽁 Helper의 전용 목적은 찜꽁 게스트 페이지에서 회의실 예약 과정을 빠르게 처리하고 입력 실수를 줄이는 것입니다. 확장 프로그램은 게스트 페이지에서만 동작하며, 층별 타임테이블로 빈 시간대를 시각화하고 사용자가 선택한 시간(기본 1시간, 10분 단위 조절 가능)을 예약 폼의 날짜·시작·종료·공간 필드에 자동 반영합니다. 또한 내 예약을 함께 표시해 시간 충돌을 바로 확인하도록 돕습니다. 데이터 수집/광고 목적 기능 없이, 예약 보조 UX 제공에 필요한 범위에서만 동작합니다.
+
+---
+## 🔐 0-2. 권한 요청 이유
+
+- `content_scripts` 매치 패턴
+  - `https://zzimkkong.com/guest`, `https://zzimkkong.com/guest/*`, `https://www.zzimkkong.com/guest`, `https://www.zzimkkong.com/guest/*`
+  - 이유: 게스트 예약 페이지에 타임테이블 UI를 삽입하고 예약 폼 자동 입력 기능을 제공하기 위해 필요합니다.
+- `host_permissions`
+  - `https://k8s.zzimkkong.com/*`
+  - 이유: 예약 현황/일정 API 조회를 통해 타임테이블과 내 예약 정보를 표시하기 위해 필요합니다.
+- 불필요한 권한 정리
+  - `permissions` 필드는 사용하지 않으며, `activeTab`/`tabs` 등 추가 권한을 요청하지 않습니다.
+  - `host_permissions`에서 `zzimkkong.com`/`www.zzimkkong.com` 전체 권한은 제거했습니다.
+
+---
+## 🛡️ 0-3. 개인정보처리방침 URL
+
+- 크롬 웹스토어 입력 권장 URL(GitHub Pages): `https://jetproc.github.io/zzimkkong-helper/privacy-policy.html`
+- 대체 URL(저장소 문서): `https://github.com/JetProc/zzimkkong-helper/blob/main/docs/privacy-policy.md`
+- 정책 문서 파일:
+  - `docs/privacy-policy.html`
+  - `docs/privacy-policy.md`
+
+> 참고: GitHub Pages를 활성화하지 않았다면 우선 저장소 URL을 사용하고, 활성화 후 권장 URL로 교체하세요.
+
+---
 ## 🧭 1. 프로그램 소개
 
 찜꽁 Helper는 우테코 판교 캠퍼스 회의실 예약 과정에서 반복되는 조작을 줄이고, 시간/공간 선택을 빠르게 완료할 수 있도록 설계되었습니다.
