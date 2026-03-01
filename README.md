@@ -2,17 +2,14 @@
 
 # 📌 찜꽁 Helper (Chrome Extension)
 
-찜꽁 게스트 페이지에서 회의실 예약을 빠르게 처리할 수 있도록 돕는 Chrome 확장 프로그램입니다. ✨
-
-- 대상 사이트: `https://zzimkkong.com/`
-- 동작 페이지: `https://zzimkkong.com/guest/*`, `https://www.zzimkkong.com/guest/*`
+찜꽁 사이트에서 회의실 예약을 편하게 처리할 수 있도록 돕는 Chrome 확장 프로그램입니다. ✨
 - 제작: `8기 프론트엔드 파라디`
 
 ---
 
 ## 🧭 1. 프로그램 소개
 
-찜꽁 Helper는 예약 과정에서 반복되는 조작을 줄이고, 시간/공간 선택을 빠르게 완료할 수 있도록 설계되었습니다.
+찜꽁 Helper는 우테코 판교 캠퍼스 회의실 예약 과정에서 반복되는 조작을 줄이고, 시간/공간 선택을 빠르게 완료할 수 있도록 설계되었습니다.
 
 핵심 목적
 - 🔎 예약 가능 시간대를 한눈에 확인
@@ -23,25 +20,16 @@
 
 ## ✨ 2. 주요 기능
 
-### 2-1. 게스트 페이지 인라인 Helper
+### 2-1. 메인 기능: 날짜/시간/공간 자동 선택
 - 🏢 층/공간 기준 타임테이블 표시
-- ⏱️ 10분 단위 블록 표시
-- 📍 현재 시간선 표시, 지난 시간대 비활성화
 - 🟩 빈 시간 클릭 시 1시간 자동 선택
 - 📝 날짜/시작/종료/공간 폼 자동 반영
-- 💚 내 예약 시간/공간 자동 매칭 후 청록색 하이라이트
 - 🔎 사용 목적 입력란으로 자동 스크롤/포커스
-- 🔔 Toast 안내 메시지 제공
 
 ### 2-2. 확장 팝업: 내 예약 현황
 - 👤 로그인 상태에서 내 예약 목록 조회
 - 📋 각 예약 카드에 공간, 층, 시간, 사용 목적, 예약자 표시
-- 🔗 각 예약별 `이 예약 공유` 버튼 제공
-
-### 2-3. 예약 공유 텍스트 생성
-- 📋 예약 1건 단위 공유 텍스트를 클립보드로 복사
-- 예시 포맷:
-
+- 🔗 각 예약별 `이 예약 공유` 버튼을 제공하여 공유 텍스트를 클립보드로 복사
 ```text
 📌 찜꽁 예약 현황
 
@@ -53,19 +41,17 @@
 
 ---
 
-## 🖼️ 3. 화면 예시 (이미지 자리)
+## 🖼️ 3. 화면 예시
 
 ### 3-1. 인라인 타임테이블
 ![인라인 타임테이블](docs/images/01-main-timetable.png)
 
 ### 3-2. 사용 가이드/매뉴얼
-![사용 가이드](docs/images/03-manual.png)
+![사용 가이드](docs/images/02-manual.png)
 
 ### 3-3. 토스트 안내
-![토스트 안내](docs/images/02-toast.png)
+![토스트 안내](docs/images/03-toast.png)
 
-### 3-4. 확장 등록 화면
-![확장 등록 화면](docs/images/install-extensions-page.png)
 
 ---
 
@@ -79,10 +65,17 @@
 git clone https://github.com/JetProc/zzimkkong-helper.git
 ```
 
-방법 B: ZIP
+방법 B: Code에서 ZIP 다운
 1. GitHub 저장소에서 `Code` 클릭
 2. `Download ZIP` 클릭
 3. 압축 해제
+
+방법 C: 릴리스에서 ZIP 다운
+
+1. GitHub 릴리스 페이지로 이동: https://github.com/JetProc/zzimkkong-helper/releases
+2. 최신 릴리스의 `Assets` 항목에서 `zzimkkong-helper.zip`을 클릭해 다운로드
+3. 압축 해제
+
 
 ### 4-2. Chrome 확장 등록
 1. 주소창에 `chrome://extensions` 입력
@@ -101,7 +94,7 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 3. `핀` 아이콘을 클릭해 고정
 4. 툴바에 고정된 `찜꽁 Helper` 아이콘 클릭 시 팝업 실행
 
-> 고정(핀) 단계 이미지는 추후 `docs/images`에 추가 예정
+![핀 고정 화면](docs/images/pin-extensions-page.png)
 
 ---
 
@@ -111,10 +104,10 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 1. 찜꽁 사이트 접속
 2. 날짜 선택
 3. 타임테이블에서 상태 확인
-- 💚 청록색: 내 예약
-- 🟩 초록색: 비어 있음
-- 🟥 빨간색: 예약 있음
-- ⚪ 회색: 지난 시간
+- 🌲 청록색: 내 예약
+- ☘️ 초록색: 비어 있음
+- 🌹 빨간색: 예약 있음
+- 🐾 회색: 지난 시간
 4. 빈 블록 클릭 후 예약 폼 자동 반영 확인
 5. 사용 목적 입력 후 예약 진행
 
