@@ -6,7 +6,6 @@
 - 제작: `8기 프론트엔드 파라디`
 
 ---
-
 ## 🧭 1. 프로그램 소개
 
 찜꽁 Helper는 우테코 판교 캠퍼스 회의실 예약 과정에서 반복되는 조작을 줄이고, 시간/공간 선택을 빠르게 완료할 수 있도록 설계되었습니다.
@@ -46,25 +45,28 @@
 
 ### 3-1. 코드 받기
 
-방법 A: clone
+방법 1: Chrome 웹스토어에서 설치 (권장)
+
+1. Chrome 웹스토어 열기: chrome.google.com/webstore
+2. 검색창에 `찜꽁 Helper` 입력하여 확장 프로그램을 찾습니다.
+3. `Chrome에 추가` 버튼을 클릭해 설치합니다.
+
+방법 2: Github에서 직접 받기
+
+방법 2-A: Git Clone
 
 ```bash
 git clone https://github.com/JetProc/zzimkkong-helper.git
 ```
 
-방법 B: Code에서 ZIP 다운
-1. GitHub 저장소에서 `Code` 클릭
-2. `Download ZIP` 클릭
-3. 압축 해제
+방법 2-B: Code에서 ZIP 다운
 
-방법 C: 릴리스에서 ZIP 다운
-
-1. GitHub 릴리스 페이지로 이동: https://github.com/JetProc/zzimkkong-helper/releases
-2. 최신 릴리스의 `Assets` 항목에서 `zzimkkong-helper.zip`을 클릭해 다운로드
-3. 압축 해제
+1. GitHub 저장소에서 `Code` → `Download ZIP` 클릭
+2. 압축 해제
 
 
-### 3-2. Chrome 확장 등록
+방법 2 사용 시 — Chrome 확장 등록
+
 1. 주소창에 `chrome://extensions` 입력
 2. 우측 상단 `개발자 모드` 활성화
 3. `압축해제된 확장 프로그램을 로드합니다` 클릭

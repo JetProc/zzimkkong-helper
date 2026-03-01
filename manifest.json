@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "찜꽁 Helper",
   "version": "0.1.0",
-  "description": "📅 찜꽁 게스트 페이지에서 11·12·13층 회의실 타임테이블을 직관적으로 확인하고, 🟩 빈 시간 블록을 클릭하면 1시간 구간이 자동 선택되어 날짜·시작·종료·공간이 예약 폼에 빠르게 반영되며, ⏱️ 지난 시간 비활성/현재 시간선/자동 포커스/토스트 안내까지 한 번에 제공해 예약 과정을 크게 줄여주는 확장 프로그램입니다. ✨ made by 8기 프론트엔드 파라디",
+  "description": "찜꽁 사이트에서 층별 회의실 타임테이블을 한눈에 확인하여 예약 폼 자동 입력을 지원하는 확장 프로그램입니다.",
   "author": "8기 프론트엔드 파라디",
   "icons": {
     "16": "src/icon.png",
@@ -26,13 +26,8 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "css": [
-        "src/vendor/toastify-js/toastify.min.css"
-      ],
-      "js": [
-        "src/vendor/toastify-js/toastify.min.js",
-        "src/content.js"
-      ],
+      "css": ["src/vendor/toastify-js/toastify.min.css"],
+      "js": ["src/vendor/toastify-js/toastify.min.js", "src/content.js"],
       "run_at": "document_idle"
     },
     {
@@ -42,28 +37,16 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "js": [
-        "src/page-bridge.js"
-      ],
+      "js": ["src/page-bridge.js"],
       "run_at": "document_idle",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "src/icon.png",
-        "src/fonts/BMDOHYEON_ttf.ttf"
-      ],
-      "matches": [
-        "https://zzimkkong.com/*",
-        "https://www.zzimkkong.com/*"
-      ]
+      "resources": ["src/icon.png", "src/fonts/BMDOHYEON_ttf.ttf"],
+      "matches": ["https://zzimkkong.com/*", "https://www.zzimkkong.com/*"]
     }
   ],
-  "host_permissions": [
-    "https://zzimkkong.com/*",
-    "https://k8s.zzimkkong.com/*",
-    "https://www.zzimkkong.com/*"
-  ]
+  "host_permissions": ["https://zzimkkong.com/*", "https://k8s.zzimkkong.com/*", "https://www.zzimkkong.com/*"]
 }
