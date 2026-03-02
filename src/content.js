@@ -3555,7 +3555,9 @@
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row {
+        height: 8px;
         min-height: 8px;
+        align-items: stretch;
         position: relative;
       }
 
@@ -3563,31 +3565,53 @@
         position: sticky;
         left: 0;
         z-index: 2;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        height: 100%;
         font-size: 8.5px;
         color: #94a3b8;
         text-align: right;
         padding-right: 6px;
         background: rgba(248, 250, 252, 0.96);
         font-variant-numeric: tabular-nums;
+        line-height: 1;
+        box-sizing: border-box;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.hour-boundary .zzk-map-calendar-time-cell {
         color: #334155;
         font-weight: 700;
+        transform: translateY(3px);
+        z-index: 5;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.half-hour-boundary .zzk-map-calendar-time-cell {
         color: #64748b;
         font-size: 8px;
         font-weight: 700;
+        transform: translateY(3px);
+        z-index: 5;
       }
 
-      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.hour-boundary > * {
-        border-top: 1.5px solid rgba(71, 85, 105, 0.62);
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.hour-boundary::before,
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.half-hour-boundary::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        pointer-events: none;
       }
 
-      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.half-hour-boundary > * {
-        border-top: 1px solid rgba(148, 163, 184, 0.48);
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.hour-boundary::before {
+        border-top: 2px solid rgba(71, 85, 105, 0.46);
+        z-index: 4;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.half-hour-boundary::before {
+        border-top: 1px solid rgba(148, 163, 184, 0.28);
+        z-index: 3;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-slot-matrix-row.current-time-row::after {
@@ -3610,7 +3634,7 @@
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot {
-        height: 8px;
+        height: 100%;
         border-radius: 2px;
         border: 1px solid rgba(100, 116, 139, 0.22);
         box-sizing: border-box;
