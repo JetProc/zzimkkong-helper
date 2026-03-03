@@ -5,34 +5,6 @@
 찜꽁 사이트에서 회의실 예약을 편하게 처리할 수 있도록 돕는 Chrome 확장 프로그램입니다. ✨
 - 제작: `8기 프론트엔드 파라디`
 
----
-## 🎯 0-1. 전용 목적 (1000자 이내)
-
-- 찜꽁 Helper의 전용 목적은 찜꽁 게스트 페이지에서 회의실 예약 과정을 빠르게 처리하고 입력 실수를 줄이는 것입니다. 확장 프로그램은 게스트 페이지에서만 동작하며, 층별 타임테이블로 빈 시간대를 시각화하고 사용자가 선택한 시간(기본 1시간, 10분 단위 조절 가능)을 예약 폼의 날짜·시작·종료·공간 필드에 자동 반영합니다. 또한 내 예약을 함께 표시해 시간 충돌을 바로 확인하도록 돕습니다. 데이터 수집/광고 목적 기능 없이, 예약 보조 UX 제공에 필요한 범위에서만 동작합니다.
-
----
-## 🔐 0-2. 권한 요청 이유
-
-- `content_scripts` 매치 패턴
-  - `https://zzimkkong.com/guest`, `https://zzimkkong.com/guest/*`, `https://www.zzimkkong.com/guest`, `https://www.zzimkkong.com/guest/*`
-  - 이유: 게스트 예약 페이지에 타임테이블 UI를 삽입하고 예약 폼 자동 입력 기능을 제공하기 위해 필요합니다.
-- `host_permissions`
-  - `https://k8s.zzimkkong.com/*`
-  - 이유: 예약 현황/일정 API 조회를 통해 타임테이블과 내 예약 정보를 표시하기 위해 필요합니다.
-- 불필요한 권한 정리
-  - `permissions` 필드는 사용하지 않으며, `activeTab`/`tabs` 등 추가 권한을 요청하지 않습니다.
-  - `host_permissions`에서 `zzimkkong.com`/`www.zzimkkong.com` 전체 권한은 제거했습니다.
-
----
-## 🛡️ 0-3. 개인정보처리방침 URL
-
-- 크롬 웹스토어 입력 권장 URL(GitHub Pages): `https://jetproc.github.io/zzimkkong-helper/privacy-policy.html`
-- 대체 URL(저장소 문서): `https://github.com/JetProc/zzimkkong-helper/blob/main/docs/privacy-policy.md`
-- 정책 문서 파일:
-  - `docs/privacy-policy.html`
-  - `docs/privacy-policy.md`
-
-> 참고: GitHub Pages를 활성화하지 않았다면 우선 저장소 URL을 사용하고, 활성화 후 권장 URL로 교체하세요.
 
 ---
 ## 🧭 1. 프로그램 소개
@@ -123,7 +95,7 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 2. 날짜 선택
 3. 시간 선택 길이 버튼 선택 (10/20/30/40/50/60분, 기본 1시간)
 4. 타임테이블에서 상태 확인
-- 🌲 청록색: 내 예약
+- 🍂 주황색: 내 예약
 - ☘️ 초록색: 비어 있음
 - 🌹 빨간색: 예약 있음
 - 🪨 회색: 지난 시간
@@ -163,7 +135,7 @@ git clone https://github.com/JetProc/zzimkkong-helper.git
 - 게스트 페이지가 열려 있는 상태에서 다시 시도
 - 브라우저 권한(클립보드) 허용 후 재시도
 
-### Q4. 내 예약(청록색) 표시가 안 보여요
+### Q4. 내 예약(주황색) 표시가 안 보여요
 - 팝업에서 내 예약이 정상 조회되는지 먼저 확인
 - 게스트 페이지와 확장을 새로고침 후 다시 확인
 - 선택한 날짜에 내 예약이 실제로 존재하는지 확인

@@ -835,7 +835,7 @@
       "<strong class='zzk-map-calendar-manual-title'>📘 찜꽁 Helper 사용 가이드</strong>",
       "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 <span class='zzk-map-calendar-manual-emphasis'>예약할 날짜를 먼저 고르세요</span>.</p>",
       "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>기본 1시간</span>이 자동 선택됩니다. (하단 버튼으로 10분 단위 조절 가능)</p>",
-      "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>청록색 블록은 내 예약</span>입니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>주황색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
       "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>페어링 존</span>은 별도로 직접 예약해주세요.</p>",
@@ -900,13 +900,13 @@
 
     const clickGuide = document.createElement('small');
     clickGuide.className = 'zzk-map-calendar-guide';
-    clickGuide.textContent = `⏱️ 회색은 지난 시간, 청록색은 내 예약입니다. 자동 선택: ${getAutoPickDurationLabel(getAutoPickDurationMinutes())}.`;
+    clickGuide.textContent = `⏱️ 회색은 지난 시간, 주황색은 내 예약입니다. 자동 선택: ${getAutoPickDurationLabel(getAutoPickDurationMinutes())}.`;
     titleControls.appendChild(clickGuide);
 
     const legend = document.createElement('div');
     legend.className = 'zzk-map-calendar-legend';
     legend.innerHTML =
-      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="mine">내 예약</span><span class="past">지난 시간</span><span class="autopick">클릭 선택 구간</span><span class="current">현재 시간선</span>';
+      '<span class="free">비어 있음</span><span class="busy">예약 있음</span><span class="mine">내 예약</span><span class="past">지난 시간</span><span class="current">현재 시간선</span>';
     titleControls.appendChild(legend);
 
     const body = document.createElement('div');
@@ -3358,15 +3358,11 @@
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .mine::before {
-        background: rgba(20, 184, 166, 0.72);
+        background: rgba(249, 115, 22, 0.78);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .past::before {
         background: rgba(148, 163, 184, 0.7);
-      }
-
-      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .autopick::before {
-        background: rgba(125, 211, 252, 0.85);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-legend .hoverpick::before {
@@ -3655,8 +3651,8 @@
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.mine {
-        background: rgba(20, 184, 166, 0.82);
-        border-color: rgba(13, 148, 136, 0.65);
+        background: rgba(249, 115, 22, 0.88);
+        border-color: rgba(194, 65, 12, 0.72);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-slot.past,

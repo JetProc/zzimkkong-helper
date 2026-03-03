@@ -374,34 +374,69 @@ async function fetchReservationsViaGuestTab(page) {
 }
 
 function getCandidateGuestTabs() {
+  const guestUrlPattern = new RegExp('^https://(?:www\\.)?zzimkkong\\.com/guest(?:[/?#]|$)');
+
+  return Promise.all([
+    queryTabs({ active: true, lastFocusedWindow: true }),
+    queryTabs({ active: true, currentWindow: true }),
+    queryTabs({}),
+  ]).then(([activeFocusedTabs, activeCurrentTabs, allTabs]) => {
+    const focusedTabs = Array.isArray(activeFocusedTabs) ? activeFocusedTabs : [];
+    const currentTabs = Array.isArray(activeCurrentTabs) ? activeCurrentTabs : [];
+    const sourceTabs = Array.isArray(allTabs) ? allTabs : [];
+
+    const priorityIds = new Set(
+      [...focusedTabs, ...currentTabs].filter((tab) => Number.isInteger(tab?.id)).map((tab) => tab.id)
+    );
+    const guestTabs = [];
+    const fallbackTabs = [];
+
+    sourceTabs.forEach((tab) => {
+      if (!Number.isInteger(tab?.id) || priorityIds.has(tab.id)) {
+        return;
+      }
+
+      const url =
+        typeof tab?.url === 'string' ? tab.url : typeof tab?.pendingUrl === 'string' ? tab.pendingUrl : '';
+
+      if (guestUrlPattern.test(url)) {
+        guestTabs.push(tab);
+        return;
+      }
+
+      fallbackTabs.push(tab);
+    });
+
+    const orderedTabs = [];
+    const seen = new Set();
+
+    [...focusedTabs, ...currentTabs, ...guestTabs, ...fallbackTabs].forEach((tab) => {
+      if (!Number.isInteger(tab?.id) || seen.has(tab.id)) {
+        return;
+      }
+      seen.add(tab.id);
+      orderedTabs.push(tab);
+    });
+
+    return orderedTabs.slice(0, 60);
+  });
+}
+
+function queryTabs(queryInfo) {
   return new Promise((resolve, reject) => {
     if (!chrome?.tabs?.query) {
       reject(new Error('탭 정보를 조회할 수 없습니다.'));
       return;
     }
 
-    chrome.tabs.query({}, (tabs) => {
+    chrome.tabs.query(queryInfo, (tabs) => {
       const runtimeError = chrome.runtime.lastError;
       if (runtimeError) {
         reject(new Error(runtimeError.message || '탭 조회에 실패했습니다.'));
         return;
       }
 
-      const guestUrlPattern = /^https:\/\/(?:www\.)?zzimkkong\.com\/guest(?:[/?#]|$)/;
-      const allTabs = Array.isArray(tabs) ? tabs : [];
-      const guestTabs = allTabs.filter((tab) => {
-        const url = typeof tab?.url === 'string' ? tab.url : '';
-        return guestUrlPattern.test(url);
-      });
-
-      guestTabs.sort((a, b) => {
-        if (a.active === b.active) {
-          return 0;
-        }
-        return a.active ? -1 : 1;
-      });
-
-      resolve(guestTabs);
+      resolve(Array.isArray(tabs) ? tabs : []);
     });
   });
 }
