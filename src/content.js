@@ -3034,7 +3034,24 @@
         transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
       }
 
-      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-help-button:hover,
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-help-button {
+        border-color: rgba(14, 116, 144, 0.42);
+        background: linear-gradient(135deg, rgba(224, 242, 254, 0.94), rgba(236, 253, 245, 0.88));
+        color: #0c4a6e;
+        box-shadow: 0 1px 0 rgba(125, 211, 252, 0.44);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-help-button:hover {
+        border-color: rgba(2, 132, 199, 0.56);
+        background: linear-gradient(135deg, rgba(186, 230, 253, 0.95), rgba(209, 250, 229, 0.9));
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-help-button[aria-expanded='true'] {
+        border-color: rgba(2, 132, 199, 0.62);
+        background: linear-gradient(135deg, rgba(186, 230, 253, 0.96), rgba(167, 243, 208, 0.92));
+        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+      }
+
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-toggle:hover {
         background: rgba(241, 245, 249, 0.95);
       }
