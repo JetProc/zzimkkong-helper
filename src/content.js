@@ -927,7 +927,7 @@
       "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>주황색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
-      "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>구분</span> 탭에서 <span class='zzk-map-calendar-manual-emphasis'>회의실/페어링 존</span>을 전환해 조회·선택할 수 있습니다.</p>",
+      "<p class='zzk-map-calendar-manual-item'>🧩 <b>구분 탭</b> <span class='zzk-map-calendar-manual-emphasis'>회의실/페어링 존</span>을 전환해 원하는 공간 타입만 빠르게 조회·선택할 수 있습니다.</p>",
     ].join('');
     titleControls.appendChild(manual);
 
@@ -5049,16 +5049,25 @@
   }
 
   function getNextHourRange() {
-    const start = new Date();
-    start.setMinutes(0, 0, 0);
-    start.setHours(start.getHours() + 1);
+    const maxMinute = 23 * 60 + 50;
+    const currentMinuteInKst = getCurrentMinuteInKST();
+    const roundedCurrentMinute = ceilToStepMinute(currentMinuteInKst, TIME_STEP_MINUTES);
 
-    const end = new Date(start);
-    end.setHours(end.getHours() + 1);
+    let startMinute = Number.isInteger(roundedCurrentMinute) ? roundedCurrentMinute : 9 * 60;
+    if (startMinute >= maxMinute) {
+      startMinute = maxMinute - TIME_STEP_MINUTES;
+    }
+
+    startMinute = Math.max(0, Math.min(maxMinute - TIME_STEP_MINUTES, startMinute));
+
+    let endMinute = Math.min(maxMinute, startMinute + AUTO_PICK_DURATION_MINUTES);
+    if (endMinute <= startMinute) {
+      endMinute = Math.min(maxMinute, startMinute + TIME_STEP_MINUTES);
+    }
 
     return {
-      startTime: formatTime(start),
-      endTime: formatTime(end),
+      startTime: minuteToHourMinute(startMinute),
+      endTime: minuteToHourMinute(endMinute),
     };
   }
 
@@ -5171,12 +5180,6 @@
 
   function isDateString(value) {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-  }
-
-  function formatTime(date) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
   }
 
   function normalizeTimeInput(inputElement) {
