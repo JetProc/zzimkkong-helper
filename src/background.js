@@ -2,20 +2,44 @@ const API_BASE_URL = 'https://k8s.zzimkkong.com';
 const KST_TIMEZONE = 'Asia/Seoul';
 const TIMELINE_SLOT_MINUTES = 10;
 const REQUEST_TIME_STEP_MINUTES = 10;
-const ROOM_LAYOUTS = [
-  { name: '금성', floorLabel: '11층 · 큰방', order: 0 },
-  { name: '지구', floorLabel: '11층 · 큰방', order: 1 },
-  { name: '수성', floorLabel: '11층 · 작은방', order: 2 },
-  { name: '화성', floorLabel: '11층 · 작은방', order: 3 },
-  { name: '보이저', floorLabel: '12층 · 큰방', order: 4 },
-  { name: '디스커버리', floorLabel: '12층 · 큰방', order: 5 },
-  { name: '아폴로', floorLabel: '12층 · 작은방', order: 6 },
-  { name: '허블', floorLabel: '12층 · 작은방', order: 7 },
-  { name: '은하수', floorLabel: '13층', order: 8 },
+const MEETING_ROOM_LAYOUTS = [
+  { name: '금성', floorLabel: '11층 · 큰방', order: 0, spaceCategory: 'meeting' },
+  { name: '지구', floorLabel: '11층 · 큰방', order: 1, spaceCategory: 'meeting' },
+  { name: '수성', floorLabel: '11층 · 작은방', order: 2, spaceCategory: 'meeting' },
+  { name: '화성', floorLabel: '11층 · 작은방', order: 3, spaceCategory: 'meeting' },
+  { name: '보이저', floorLabel: '12층 · 큰방', order: 4, spaceCategory: 'meeting' },
+  { name: '디스커버리', floorLabel: '12층 · 큰방', order: 5, spaceCategory: 'meeting' },
+  { name: '아폴로', floorLabel: '12층 · 작은방', order: 6, spaceCategory: 'meeting' },
+  { name: '허블', floorLabel: '12층 · 작은방', order: 7, spaceCategory: 'meeting' },
+  { name: '은하수', floorLabel: '13층', order: 8, spaceCategory: 'meeting' },
 ];
-const TARGET_ROOM_NAMES = ROOM_LAYOUTS.map((layout) => layout.name);
-const TARGET_ROOM_SET = new Set(TARGET_ROOM_NAMES);
-const ROOM_LAYOUT_BY_NAME = new Map(ROOM_LAYOUTS.map((layout) => [layout.name, layout]));
+
+const PAIRING_ZONE_LAYOUTS = [
+  ...Array.from({ length: 8 }, (_, index) => {
+    const zoneNumber = 14 - index;
+    return {
+      name: `페 ${zoneNumber}`,
+      floorLabel: '12층 · 페어링 존',
+      order: 100 + index,
+      spaceCategory: 'pairing',
+    };
+  }),
+  ...Array.from({ length: 6 }, (_, index) => {
+    const zoneNumber = 6 - index;
+    return {
+      name: `페 ${zoneNumber}`,
+      floorLabel: '13층 · 페어링 존',
+      order: 108 + index,
+      spaceCategory: 'pairing',
+    };
+  }),
+];
+
+const SPACE_LAYOUTS = [...MEETING_ROOM_LAYOUTS, ...PAIRING_ZONE_LAYOUTS];
+const TARGET_SPACE_KEY_SET = new Set(SPACE_LAYOUTS.map((layout) => normalizeSpaceNameForLayout(layout.name)));
+const SPACE_LAYOUT_BY_KEY = new Map(
+  SPACE_LAYOUTS.map((layout) => [normalizeSpaceNameForLayout(layout.name), layout])
+);
 const KST_HOUR_MINUTE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   timeZone: KST_TIMEZONE,
   hour12: false,
@@ -102,6 +126,7 @@ async function loadAvailability(payload) {
     name: room.name,
     color: room.color,
     floorLabel: room.floorLabel,
+    spaceCategory: room.spaceCategory,
     isAvailable: availabilityBySpaceId.get(room.id) === true,
   }));
 
@@ -143,6 +168,7 @@ async function loadDailySchedule(payload) {
         name: room.name,
         color: room.color,
         floorLabel: room.floorLabel,
+        spaceCategory: room.spaceCategory,
         windowStartMinute: room.windowStartMinute,
         windowEndMinute: room.windowEndMinute,
         reservations,
@@ -355,7 +381,7 @@ async function loadMapContext(payload) {
 
   return {
     mapId,
-    mapName: typeof mapData?.mapName === 'string' ? mapData.mapName : '회의실 지도',
+    mapName: typeof mapData?.mapName === 'string' ? mapData.mapName : '공간 지도',
     targetRooms: buildTargetRooms(spaces),
   };
 }
@@ -365,21 +391,24 @@ function buildTargetRooms(spaces) {
     .filter((space) => Boolean(space?.reservationEnable))
     .map((space) => {
       const id = Number(space?.id);
-      const normalizedName =
+      const sourceName =
         typeof space?.name === 'string' && space.name.trim() !== '' ? space.name.trim() : `공간 ${id}`;
-      const layout = ROOM_LAYOUT_BY_NAME.get(normalizedName);
+      const layout = SPACE_LAYOUT_BY_KEY.get(normalizeSpaceNameForLayout(sourceName));
 
       return {
         id,
-        name: normalizedName,
+        name: layout?.name || sourceName,
         color: typeof space?.color === 'string' ? space.color : '#9CA3AF',
         floorLabel: layout?.floorLabel || '미지정층',
+        spaceCategory: layout?.spaceCategory || 'meeting',
         order: Number.isInteger(layout?.order) ? layout.order : Number.MAX_SAFE_INTEGER,
         windowStartMinute: parseWindowStartMinute(space?.settings),
         windowEndMinute: parseWindowEndMinute(space?.settings),
       };
     })
-    .filter((room) => Number.isInteger(room.id) && TARGET_ROOM_SET.has(room.name))
+    .filter(
+      (room) => Number.isInteger(room.id) && TARGET_SPACE_KEY_SET.has(normalizeSpaceNameForLayout(room.name || ''))
+    )
     .sort((a, b) => a.order - b.order)
     .map(({ order, ...room }) => room);
 }
@@ -554,6 +583,14 @@ function normalizeSpaces(spacesResponse) {
     return spacesResponse;
   }
   return [];
+}
+
+function normalizeSpaceNameForLayout(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.replace(/\s+/g, '').trim();
 }
 
 async function fetchJson(url, requestInit = {}) {

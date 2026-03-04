@@ -36,6 +36,12 @@
   const CALENDAR_WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   const BIG_ROOM_NAMES = new Set(['금성', '지구', '보이저', '디스커버리']);
   const SMALL_ROOM_NAMES = new Set(['수성', '화성', '아폴로', '허블']);
+  const SPACE_CATEGORY_MEETING = 'meeting';
+  const SPACE_CATEGORY_PAIRING = 'pairing';
+  const MAP_CALENDAR_SPACE_CATEGORY_OPTIONS = [
+    { value: SPACE_CATEGORY_MEETING, label: '회의실' },
+    { value: SPACE_CATEGORY_PAIRING, label: '페어링 존' },
+  ];
   const HOST_FORM_ACTION_DELAY_MS = 70;
   const HOST_TIME_SECTION_SELECTOR = '#root > div > aside > form > section > div:nth-child(2)';
   const HOST_TIME_PANEL_SELECTORS = [
@@ -66,6 +72,7 @@
     autoScheduleRefreshTimer: null,
     autoPickedRange: null,
     autoPickDurationMinutes: AUTO_PICK_DURATION_MINUTES,
+    mapCalendarSpaceCategory: SPACE_CATEGORY_MEETING,
     mapCalendarManualExpanded: false,
     popupMessageBridgeRegistered: false,
     myReservationsCache: [],
@@ -302,7 +309,7 @@
     }
 
     state.loading = true;
-    setStatus('회의실 현황을 불러오는 중입니다...', 'loading');
+    setStatus('공간 현황을 불러오는 중입니다...', 'loading');
     state.elements.refreshButton.disabled = true;
 
     try {
@@ -340,7 +347,7 @@
         }
       }
 
-      setStatus(`${data?.mapName || '회의실 지도'} · ${date} ${startTime}~${endTime} 기준`, 'success');
+      setStatus(`${data?.mapName || '공간 지도'} · ${date} ${startTime}~${endTime} 기준`, 'success');
     } catch (error) {
       clearMapHighlights();
       setStatus(getErrorMessage(error), 'error');
@@ -524,6 +531,11 @@
         keys.push('name:' + normalizedName);
       }
 
+      const normalizedNameKey = normalizeSpaceNameForMatch(reservation.roomName || '');
+      if (normalizedNameKey) {
+        keys.push('name-key:' + normalizedNameKey);
+      }
+
       keys.forEach((key) => {
         const list = byRoom.get(key) || [];
         list.push(reservation);
@@ -549,6 +561,14 @@
       const byName = myReservationsByRoom.get('name:' + normalizedRoomName);
       if (Array.isArray(byName)) {
         candidates.push(...byName);
+      }
+    }
+
+    const normalizedRoomNameKey = normalizeSpaceNameForMatch(room?.name || '');
+    if (normalizedRoomNameKey) {
+      const byNameKey = myReservationsByRoom.get('name-key:' + normalizedRoomNameKey);
+      if (Array.isArray(byNameKey)) {
+        candidates.push(...byNameKey);
       }
     }
 
@@ -638,6 +658,73 @@
     return `${minute}분`;
   }
 
+  function sanitizeSpaceCategory(value) {
+    if (value === SPACE_CATEGORY_PAIRING) {
+      return SPACE_CATEGORY_PAIRING;
+    }
+    return SPACE_CATEGORY_MEETING;
+  }
+
+  function getSpaceCategoryLabel(category) {
+    return category === SPACE_CATEGORY_PAIRING ? '페어링 존' : '회의실';
+  }
+
+  function normalizeSpaceNameForMatch(value) {
+    const normalized = normalizeElementText(value);
+    return normalized.replace(/\s+/g, '');
+  }
+
+  function getRoomSpaceCategory(room) {
+    const fromProperty = sanitizeSpaceCategory(room?.spaceCategory);
+    if (room?.spaceCategory === SPACE_CATEGORY_MEETING || room?.spaceCategory === SPACE_CATEGORY_PAIRING) {
+      return fromProperty;
+    }
+
+    const roomNameKey = normalizeSpaceNameForMatch(room?.name || '');
+    if (/^페\d+$/.test(roomNameKey)) {
+      return SPACE_CATEGORY_PAIRING;
+    }
+
+    return SPACE_CATEGORY_MEETING;
+  }
+
+  function createMapCalendarSpaceCategoryControls(onSelect) {
+    const selectedCategory = sanitizeSpaceCategory(state.mapCalendarSpaceCategory);
+    const controlRow = document.createElement('div');
+    controlRow.className = 'zzk-map-calendar-space-category-controls';
+
+    const label = document.createElement('strong');
+    label.className = 'zzk-map-calendar-space-category-label';
+    label.textContent = '구분';
+    controlRow.appendChild(label);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'zzk-map-calendar-space-category-tabs';
+    controlRow.appendChild(tabs);
+
+    MAP_CALENDAR_SPACE_CATEGORY_OPTIONS.forEach((option) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'zzk-map-calendar-space-category-button';
+
+      const isActive = option.value === selectedCategory;
+      if (isActive) {
+        button.classList.add('active');
+      }
+
+      button.textContent = option.label;
+      button.setAttribute('aria-pressed', String(isActive));
+      button.addEventListener('click', () => {
+        if (typeof onSelect === 'function') {
+          onSelect(option.value);
+        }
+      });
+      tabs.appendChild(button);
+    });
+
+    return controlRow;
+  }
+
   function createMapCalendarDurationControls(onSelect) {
     const selectedDurationMinutes = getAutoPickDurationMinutes();
 
@@ -721,7 +808,9 @@
     overlay.textContent = '';
 
     const timeline = scheduleData.timeline;
-    const rooms = Array.isArray(scheduleData.rooms) ? scheduleData.rooms : [];
+    const allRooms = Array.isArray(scheduleData.rooms) ? scheduleData.rooms : [];
+    const selectedSpaceCategory = sanitizeSpaceCategory(state.mapCalendarSpaceCategory);
+    const rooms = allRooms.filter((room) => getRoomSpaceCategory(room) === selectedSpaceCategory);
     const scheduleDate = isDateString(scheduleData?.date) ? scheduleData.date : '';
     const todayDate = getTodayDateInKST();
     const isTodaySchedule = scheduleDate === todayDate;
@@ -838,7 +927,7 @@
       "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>주황색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
-      "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>페어링 존</span>은 별도로 직접 예약해주세요.</p>",
+      "<p class='zzk-map-calendar-manual-note'><strong>💡 비고</strong> <span class='zzk-map-calendar-manual-emphasis'>구분</span> 탭에서 <span class='zzk-map-calendar-manual-emphasis'>회의실/페어링 존</span>을 전환해 조회·선택할 수 있습니다.</p>",
     ].join('');
     titleControls.appendChild(manual);
 
@@ -884,6 +973,22 @@
       titleControls.appendChild(controlRow);
     }
 
+    const spaceCategoryControls = createMapCalendarSpaceCategoryControls((nextCategory) => {
+      const normalizedCategory = sanitizeSpaceCategory(nextCategory);
+      if (normalizedCategory === state.mapCalendarSpaceCategory) {
+        return;
+      }
+
+      state.mapCalendarSpaceCategory = normalizedCategory;
+      state.autoPickedRange = null;
+
+      const targetDate = isDateString(scheduleData?.date) ? scheduleData.date : state.activeScheduleDate;
+      const nextScheduleData =
+        targetDate && state.scheduleCache.has(targetDate) ? state.scheduleCache.get(targetDate) : scheduleData;
+      renderMapCalendarOverlay(nextScheduleData);
+    });
+    titleControls.appendChild(spaceCategoryControls);
+
     const durationControls = createMapCalendarDurationControls((nextDurationMinutes) => {
       if (nextDurationMinutes === getAutoPickDurationMinutes()) {
         return;
@@ -897,11 +1002,6 @@
       showHelperToast(`자동 선택 시간이 ${getAutoPickDurationLabel(nextDurationMinutes)}으로 변경되었습니다.`, 'info', 1800);
     });
     titleControls.appendChild(durationControls);
-
-    const clickGuide = document.createElement('small');
-    clickGuide.className = 'zzk-map-calendar-guide';
-    clickGuide.textContent = `⏱️ 회색은 지난 시간, 주황색은 내 예약입니다. 자동 선택: ${getAutoPickDurationLabel(getAutoPickDurationMinutes())}.`;
-    titleControls.appendChild(clickGuide);
 
     const legend = document.createElement('div');
     legend.className = 'zzk-map-calendar-legend';
@@ -920,7 +1020,7 @@
     if (timeline.length === 0 || rooms.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'zzk-map-calendar-empty';
-      empty.textContent = '표시할 회의실 일정이 없습니다.';
+      empty.textContent = `표시할 ${getSpaceCategoryLabel(selectedSpaceCategory)} 일정이 없습니다.`;
       body.appendChild(empty);
       return;
     }
@@ -931,7 +1031,7 @@
     if (flatRooms.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'zzk-map-calendar-empty';
-      empty.textContent = '표시할 회의실 일정이 없습니다.';
+      empty.textContent = `표시할 ${getSpaceCategoryLabel(selectedSpaceCategory)} 일정이 없습니다.`;
       body.appendChild(empty);
       return;
     }
@@ -1860,12 +1960,18 @@
     rooms.forEach((room) => {
       const floorCategory = getRoomFloorCategory(room);
       const roomType = getRoomTypeMeta(room);
+      const spaceCategory = getRoomSpaceCategory(room);
 
-      if (!activeGroup || activeGroup.floorCategory !== floorCategory) {
+      if (
+        !activeGroup ||
+        activeGroup.floorCategory !== floorCategory ||
+        activeGroup.spaceCategory !== spaceCategory
+      ) {
         activeGroup = {
           floorCategory,
           roomTypes: [],
           rooms: [],
+          spaceCategory,
         };
         groups.push(activeGroup);
       }
@@ -1898,6 +2004,16 @@
     const rooms = Array.isArray(group?.rooms) ? group.rooms : [];
     if (rooms.length === 0) {
       return [];
+    }
+
+    if (group?.spaceCategory === SPACE_CATEGORY_PAIRING) {
+      return [
+        {
+          kind: 'pairing',
+          label: '페어링 존',
+          span: rooms.length,
+        },
+      ];
     }
 
     const sections = [];
@@ -1969,8 +2085,9 @@
     }
 
     const normalizedRoomName = normalizeElementText(roomName);
+    const normalizedRoomNameKey = normalizeSpaceNameForMatch(roomName);
     const targetOption = getHostSpaceOptions().find(
-      (option) => normalizeElementText(option.textContent || '') === normalizedRoomName
+      (option) => normalizeSpaceNameForMatch(option.textContent || '') === normalizedRoomNameKey
     );
     if (!(targetOption instanceof HTMLElement)) {
       return {
@@ -1983,7 +2100,8 @@
     await sleep(HOST_FORM_ACTION_DELAY_MS);
 
     const selectedText = normalizeElementText(latestSpaceButton.textContent || '');
-    if (!selectedText.includes(normalizedRoomName)) {
+    const selectedTextKey = normalizeSpaceNameForMatch(selectedText);
+    if (!selectedText.includes(normalizedRoomName) && !selectedTextKey.includes(normalizedRoomNameKey)) {
       return { ok: false, error: '공간 자동 선택을 완료하지 못했습니다.' };
     }
 
@@ -2940,6 +3058,7 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-guide,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-controls,
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-space-category-controls,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-duration-controls,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-manual,
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-card.collapsed .zzk-map-calendar-legend {
@@ -3070,6 +3189,57 @@
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-controls {
         display: grid;
         gap: 6px;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-label {
+        font-size: 8.5px;
+        font-weight: 900;
+        color: #0f766e;
+        margin-right: 2px;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px;
+        border-radius: 999px;
+        border: 1px solid rgba(14, 116, 144, 0.26);
+        background: rgba(236, 253, 245, 0.72);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-button {
+        height: 22px;
+        border: 1px solid rgba(14, 116, 144, 0.22);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.96);
+        color: #0f766e;
+        font-size: 8.5px;
+        font-weight: 800;
+        line-height: 1;
+        padding: 0 10px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-button:hover {
+        background: rgba(220, 252, 231, 0.88);
+        border-color: rgba(5, 150, 105, 0.38);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-space-category-button.active {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        border-color: rgba(3, 105, 161, 0.76);
+        color: #f8fafc;
+        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.24);
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-duration-controls {
@@ -3523,6 +3693,11 @@
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-floor-type.small {
         background: rgba(186, 230, 253, 0.5);
+      }
+
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-floor-type.pairing {
+        background: rgba(191, 219, 254, 0.58);
+        color: #1e3a8a;
       }
 
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-floor-type.other {
@@ -5132,7 +5307,7 @@
         <header class="zzk-header">
           <div>
             <p class="zzk-eyebrow">찜꽁 확장 패널</p>
-            <h2>시간대별 회의실 현황</h2>
+            <h2>시간대별 공간 현황</h2>
           </div>
           <button id="zzk-collapse" type="button" aria-label="패널 접기">접기</button>
         </header>
