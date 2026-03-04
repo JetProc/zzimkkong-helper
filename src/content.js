@@ -26,6 +26,8 @@
   });
   const TIME_STEP_MINUTES = 10;
   const AUTO_PICK_DURATION_MINUTES = 60;
+  const BOOKABLE_START_MINUTE = 7 * 60;
+  const BOOKABLE_END_MINUTE = 23 * 60;
   const AUTO_PICK_DURATION_OPTIONS = [10, 20, 30, 40, 50, 60];
   const MATRIX_TIME_COLUMN_WIDTH_PX = 52;
   const MATRIX_ROOM_COLUMN_MIN_WIDTH_PX = 30;
@@ -408,8 +410,9 @@
     }
 
     if (state.scheduleCache.has(date)) {
+      const cachedSchedule = state.scheduleCache.get(date);
       state.activeScheduleDate = date;
-      renderMapCalendarOverlay(state.scheduleCache.get(date));
+      renderMapCalendarOverlay(cachedSchedule);
       return;
     }
 
@@ -433,6 +436,45 @@
     state.scheduleCache.set(date, response.data);
     state.activeScheduleDate = date;
     renderMapCalendarOverlay(response.data);
+  }
+
+  function isTodayAllPastSchedule(scheduleData) {
+    if (!scheduleData || !isDateString(scheduleData?.date)) {
+      return false;
+    }
+
+    if (scheduleData.date !== getTodayDateInKST()) {
+      return false;
+    }
+
+    const currentMinute = getCurrentMinuteInKST();
+    if (!Number.isInteger(currentMinute)) {
+      return false;
+    }
+
+    const timeline = Array.isArray(scheduleData?.timeline) ? scheduleData.timeline : [];
+    if (timeline.length === 0) {
+      return false;
+    }
+
+    return timeline.every((slot) => Number.isInteger(slot?.startMinute) && slot.startMinute < currentMinute);
+  }
+
+  function getEffectiveCalendarMinDate() {
+    const todayDate = getTodayDateInKST();
+    const tomorrowDate = addDaysToDateString(todayDate, 1);
+    const currentMinute = getCurrentMinuteInKST();
+
+    if (Number.isInteger(currentMinute) && currentMinute >= BOOKABLE_END_MINUTE) {
+      return isDateString(tomorrowDate) ? tomorrowDate : todayDate;
+    }
+
+    const todaySchedule = state.scheduleCache.get(todayDate);
+    if (isTodayAllPastSchedule(todaySchedule)) {
+      return isDateString(tomorrowDate) ? tomorrowDate : todayDate;
+    }
+
+    return todayDate;
   }
 
   async function ensureMyReservationsForOverlayLoaded(force = false) {
@@ -924,7 +966,6 @@
       "<strong class='zzk-map-calendar-manual-title'>📘 찜꽁 Helper 사용 가이드</strong>",
       "<p class='zzk-map-calendar-manual-item'>🗓️ <b>날짜 선택</b> 상단 달력에서 <span class='zzk-map-calendar-manual-emphasis'>예약할 날짜를 먼저 고르세요</span>.</p>",
       "<p class='zzk-map-calendar-manual-item'>🟩 <b>시간 클릭</b> 비어 있는 블록(초록)을 누르면 해당 시각부터 <span class='zzk-map-calendar-manual-emphasis'>기본 1시간</span>이 자동 선택됩니다. (하단 버튼으로 10분 단위 조절 가능)</p>",
-      "<p class='zzk-map-calendar-manual-item'>🧭 <b>내 예약 표시</b> 타임테이블의 <span class='zzk-map-calendar-manual-emphasis'>주황색 블록은 내 예약</span>입니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🤖 <b>자동 입력</b> 날짜/시작/종료/공간이 사이트 예약 폼에 <span class='zzk-map-calendar-manual-emphasis'>자동 반영</span>됩니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>⏬ <b>자동 이동</b> <span class='zzk-map-calendar-manual-emphasis'>반영 후 약 3초 내 화면이 내려가며</span> 안내 문구와 함께 '사용 목적' 입력란으로 포커스가 이동합니다.</p>",
       "<p class='zzk-map-calendar-manual-item'>🧩 <b>구분 탭</b> <span class='zzk-map-calendar-manual-emphasis'>회의실/페어링 존</span>을 전환해 원하는 공간 타입만 빠르게 조회·선택할 수 있습니다.</p>",
@@ -950,15 +991,18 @@
       const controlRow = document.createElement('div');
       controlRow.className = 'zzk-map-calendar-controls';
 
-      const dateMin = getTodayDateInKST();
+      const dateMin = getEffectiveCalendarMinDate();
       const initialDate = clampDateToMin(state.elements.dateInput.value || scheduleData.date || '', dateMin);
+      state.elements.dateInput.min = dateMin;
       state.elements.dateInput.value = initialDate;
 
       const datePicker = createMapCalendarDatePicker({
         selectedDate: initialDate,
         minDate: dateMin,
         onSelect: (nextDate) => {
-          const normalizedDate = clampDateToMin(nextDate, dateMin);
+          const currentMinDate = getEffectiveCalendarMinDate();
+          const normalizedDate = clampDateToMin(nextDate, currentMinDate);
+          state.elements.dateInput.min = currentMinDate;
           state.elements.dateInput.value = normalizedDate;
           state.autoPickedRange = null;
           if (state.scheduleOverlayEnabled && state.scheduleCache.has(normalizedDate)) {
@@ -1564,6 +1608,7 @@
 
     const renderDateGrid = () => {
       const todayDate = getTodayDateInKST();
+      const isTodayDisabled = isTodayAllPastSchedule(state.scheduleCache.get(todayDate));
       const minLocalDate = parseDateStringToLocal(normalizedMinDate);
       const minMonthKey =
         minLocalDate instanceof Date ? minLocalDate.getFullYear() * 12 + minLocalDate.getMonth() : -Infinity;
@@ -1577,7 +1622,11 @@
         const quickDate = addDaysToDateString(todayDate, config.dayOffset);
         const quickButton = quickButtons[index];
         if (quickButton instanceof HTMLButtonElement) {
-          quickButton.classList.toggle('active', activeDate === quickDate);
+          const isTodayQuickButton = config.dayOffset === 0 || quickDate === todayDate;
+          const isDisabled =
+            !isDateString(quickDate) || quickDate < normalizedMinDate || (isTodayQuickButton && isTodayDisabled);
+          quickButton.disabled = isDisabled;
+          quickButton.classList.toggle('active', !isDisabled && activeDate === quickDate);
         }
       });
 
@@ -1630,16 +1679,25 @@
         if (dayDate.getMonth() !== visibleMonthDate.getMonth()) {
           dayButton.classList.add('outside');
         }
-        if (dayDateString === todayDate) {
+        const isTodayCell = dayDateString === todayDate;
+        const isDisabledTodayCell = isTodayCell && isTodayDisabled;
+
+        if (isTodayCell) {
           dayButton.classList.add('today');
         }
         if (dayDateString === activeDate) {
           dayButton.classList.add('selected');
         }
 
-        dayButton.addEventListener('click', () => {
-          selectDate(dayDateString);
-        });
+        if (isDisabledTodayCell) {
+          dayButton.classList.add('disabled');
+          dayButton.disabled = true;
+          dayButton.setAttribute('aria-disabled', 'true');
+        } else {
+          dayButton.addEventListener('click', () => {
+            selectDate(dayDateString);
+          });
+        }
 
         dayGrid.appendChild(dayButton);
       }
@@ -1663,6 +1721,10 @@
       }
 
       quickButton.addEventListener('click', () => {
+        if (quickButton.disabled) {
+          return;
+        }
+
         const quickDate = addDaysToDateString(getTodayDateInKST(), config.dayOffset);
         if (isDateString(quickDate)) {
           selectDate(quickDate);
@@ -3358,6 +3420,13 @@
         cursor: pointer;
       }
 
+      #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-date-quick-button:disabled {
+        color: #94a3b8;
+        background: rgba(248, 250, 252, 0.94);
+        border-color: rgba(203, 213, 225, 0.72);
+        cursor: not-allowed;
+      }
+
       #${MAP_CALENDAR_OVERLAY_ID} .zzk-map-calendar-date-quick-button.active {
         background: rgba(14, 165, 233, 0.18);
         border-color: rgba(14, 165, 233, 0.38);
@@ -4089,15 +4158,17 @@
 
   function initializeDefaults(elements) {
     const todayDate = getTodayDateInKST();
-    elements.dateInput.min = todayDate;
 
     const hostDateInput = document.querySelector("input[name='date']");
     const hostDateValue =
       hostDateInput instanceof HTMLInputElement && hostDateInput.value ? hostDateInput.value : todayDate;
     const baseDate = clampDateToMin(hostDateValue, todayDate);
 
-    const range = getNextHourRange();
-    elements.dateInput.value = baseDate;
+    const range = getNextHourRange(baseDate);
+    const minDate = getEffectiveCalendarMinDate();
+
+    elements.dateInput.min = minDate;
+    elements.dateInput.value = clampDateToMin(range.date, minDate);
     elements.startInput.value = range.startTime;
     elements.endInput.value = range.endTime;
     normalizeTimeInput(elements.startInput);
@@ -4122,9 +4193,9 @@
       return;
     }
 
-    const todayDate = getTodayDateInKST();
-    state.elements.dateInput.min = todayDate;
-    const normalizedDate = clampDateToMin(target.value, todayDate);
+    const minDate = getEffectiveCalendarMinDate();
+    state.elements.dateInput.min = minDate;
+    const normalizedDate = clampDateToMin(target.value, minDate);
     state.elements.dateInput.value = normalizedDate;
     if (!state.slotAutoPicking) {
       state.autoPickedRange = null;
@@ -5048,27 +5119,48 @@
     });
   }
 
-  function getNextHourRange() {
-    const maxMinute = 23 * 60 + 50;
+  function getNextHourRange(baseDate = '') {
+    const todayDate = getTodayDateInKST();
+    const normalizedBaseDate = isDateString(baseDate) ? baseDate : todayDate;
+
+    const makeWindow = (date, startMinute) => {
+      const safeStart = Math.max(BOOKABLE_START_MINUTE, Math.min(BOOKABLE_END_MINUTE - TIME_STEP_MINUTES, startMinute));
+      let safeEnd = Math.min(BOOKABLE_END_MINUTE, safeStart + AUTO_PICK_DURATION_MINUTES);
+      if (safeEnd <= safeStart) {
+        safeEnd = Math.min(BOOKABLE_END_MINUTE, safeStart + TIME_STEP_MINUTES);
+      }
+
+      return {
+        date,
+        startTime: minuteToHourMinute(safeStart),
+        endTime: minuteToHourMinute(safeEnd),
+      };
+    };
+
+    if (normalizedBaseDate > todayDate) {
+      return makeWindow(normalizedBaseDate, BOOKABLE_START_MINUTE);
+    }
+
+    if (normalizedBaseDate < todayDate) {
+      return makeWindow(todayDate, BOOKABLE_START_MINUTE);
+    }
+
     const currentMinuteInKst = getCurrentMinuteInKST();
     const roundedCurrentMinute = ceilToStepMinute(currentMinuteInKst, TIME_STEP_MINUTES);
 
-    let startMinute = Number.isInteger(roundedCurrentMinute) ? roundedCurrentMinute : 9 * 60;
-    if (startMinute >= maxMinute) {
-      startMinute = maxMinute - TIME_STEP_MINUTES;
+    if (!Number.isInteger(roundedCurrentMinute)) {
+      return makeWindow(todayDate, BOOKABLE_START_MINUTE);
     }
 
-    startMinute = Math.max(0, Math.min(maxMinute - TIME_STEP_MINUTES, startMinute));
-
-    let endMinute = Math.min(maxMinute, startMinute + AUTO_PICK_DURATION_MINUTES);
-    if (endMinute <= startMinute) {
-      endMinute = Math.min(maxMinute, startMinute + TIME_STEP_MINUTES);
+    if (roundedCurrentMinute >= BOOKABLE_END_MINUTE) {
+      const tomorrowDate = addDaysToDateString(todayDate, 1);
+      if (isDateString(tomorrowDate)) {
+        return makeWindow(tomorrowDate, BOOKABLE_START_MINUTE);
+      }
+      return makeWindow(todayDate, BOOKABLE_END_MINUTE - TIME_STEP_MINUTES);
     }
 
-    return {
-      startTime: minuteToHourMinute(startMinute),
-      endTime: minuteToHourMinute(endMinute),
-    };
+    return makeWindow(todayDate, Math.max(BOOKABLE_START_MINUTE, roundedCurrentMinute));
   }
 
   function formatDate(date) {
@@ -5156,9 +5248,9 @@
       return '';
     }
 
-    const todayDate = getTodayDateInKST();
-    inputElement.min = todayDate;
-    const normalizedDate = clampDateToMin(inputElement.value, todayDate);
+    const minDate = getEffectiveCalendarMinDate();
+    inputElement.min = minDate;
+    const normalizedDate = clampDateToMin(inputElement.value, minDate);
     if (inputElement.value !== normalizedDate) {
       inputElement.value = normalizedDate;
     }
