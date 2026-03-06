@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "찜꽁 Helper",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "찜꽁 사이트에서 층별 회의실 타임테이블을 한눈에 확인하여 예약 폼 자동 입력을 지원하는 확장 프로그램입니다.",
   "author": "8기 프론트엔드 파라디",
   "icons": {
