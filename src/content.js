@@ -96,6 +96,8 @@
     hookHistoryChanges();
     window.addEventListener('popstate', handleLocationChange);
     document.addEventListener('change', handleHostDateChange, true);
+    document.addEventListener('pointerdown', handleHostTimeControlPointerDown, true);
+    document.addEventListener('focusin', handleHostTimeControlFocusIn, true);
     restoreForcedHiddenHostTimePanels();
 
     if (isGuestPage()) {
@@ -315,6 +317,7 @@
     state.elements.refreshButton.disabled = true;
 
     try {
+      let scheduleOverlayErrorMessage = '';
       const response = await sendMessage({
         type: 'ZZK_FETCH_AVAILABILITY',
         payload: {
@@ -344,9 +347,21 @@
       if (state.scheduleOverlayEnabled) {
         try {
           await refreshDailySchedule(date);
-        } catch {
+        } catch (error) {
+          scheduleOverlayErrorMessage = reportScheduleOverlayFailure(error, {
+            date,
+            sharingMapId,
+          });
           removeMapCalendarOverlay();
         }
+      }
+
+      if (scheduleOverlayErrorMessage) {
+        setStatus(
+          `${data?.mapName || '공간 지도'} 현황은 불러왔지만 시간표 표시에는 실패했습니다. ${scheduleOverlayErrorMessage}`,
+          'error'
+        );
+        return;
       }
 
       setStatus(`${data?.mapName || '공간 지도'} · ${date} ${startTime}~${endTime} 기준`, 'success');
@@ -817,6 +832,7 @@
 
     const mapRoot = getMapRootElement();
     if (!mapRoot) {
+      scheduleCalendarOverlayRefresh(450);
       return;
     }
 
@@ -4209,6 +4225,42 @@
     scheduleInputRefresh();
   }
 
+  function handleHostTimeControlPointerDown(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    if (!shouldRestoreForcedHiddenHostTimePanels(target)) {
+      return;
+    }
+
+    restoreForcedHiddenHostTimePanels();
+  }
+
+  function handleHostTimeControlFocusIn(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    if (!shouldRestoreForcedHiddenHostTimePanels(target)) {
+      return;
+    }
+
+    restoreForcedHiddenHostTimePanels();
+  }
+
+  function shouldRestoreForcedHiddenHostTimePanels(target) {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+
+    return Boolean(
+      target.closest("button[name='start'], button[name='end'], input[type='radio'][name='midday'], input[type='radio'][name='hour'], input[type='radio'][name='minute']")
+    );
+  }
+
   function scheduleHighlightRefresh() {
     clearTimeout(state.autoRefreshTimer);
     state.autoRefreshTimer = setTimeout(() => {
@@ -4228,7 +4280,7 @@
     }, delay);
   }
 
-  function scheduleCalendarOverlayRefresh() {
+  function scheduleCalendarOverlayRefresh(delay = 220) {
     clearTimeout(state.autoScheduleRefreshTimer);
     state.autoScheduleRefreshTimer = setTimeout(() => {
       if (!state.scheduleOverlayEnabled || !state.activeScheduleDate) {
@@ -4239,7 +4291,19 @@
       if (cached) {
         renderMapCalendarOverlay(cached);
       }
-    }, 220);
+    }, delay);
+  }
+
+  function reportScheduleOverlayFailure(error, context = {}) {
+    const message = getErrorMessage(error);
+
+    console.error('[zzk] schedule overlay render failed', {
+      ...context,
+      message,
+      error,
+    });
+
+    return message;
   }
 
   function handleLocationChange() {

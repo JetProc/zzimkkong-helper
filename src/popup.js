@@ -10,7 +10,7 @@
     ['허블', '12층'],
     ['은하수', '13층'],
   ]);
-  const GUEST_OPEN_URL = 'https://zzimkkong.com/guest/gAjJTeISFY54CNKWYmOVxQ';
+  const GUEST_OPEN_URL = 'https://zzimkkong.com/guest/-s_8q_cZkRLbkaFFER1xSw';
 
   const debug = () => {};
 
