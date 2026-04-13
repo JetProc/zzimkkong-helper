@@ -5,18 +5,18 @@
   "description": "찜꽁 사이트에서 층별 회의실 타임테이블을 한눈에 확인하여 예약 폼 자동 입력을 지원하는 확장 프로그램입니다.",
   "author": "8기 프론트엔드 파라디",
   "icons": {
-    "16": "src/icon.png",
-    "32": "src/icon.png",
-    "48": "src/icon.png",
-    "128": "src/icon.png"
+    "16": "src/assets/images/icon.png",
+    "32": "src/assets/images/icon.png",
+    "48": "src/assets/images/icon.png",
+    "128": "src/assets/images/icon.png"
   },
   "action": {
-    "default_icon": "src/icon.png",
+    "default_icon": "src/assets/images/icon.png",
     "default_title": "찜꽁 Helper - 내 예약 현황",
-    "default_popup": "src/popup.html"
+    "default_popup": "src/popup/popup.html"
   },
   "background": {
-    "service_worker": "src/background.js"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [
     {
@@ -26,13 +26,8 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "css": [
-        "src/vendor/toastify-js/toastify.min.css"
-      ],
-      "js": [
-        "src/vendor/toastify-js/toastify.min.js",
-        "src/content.js"
-      ],
+      "css": ["src/vendor/toastify-js/toastify.min.css", "src/content/calendar.css"],
+      "js": ["src/vendor/toastify-js/toastify.min.js", "src/content/content.js"],
       "run_at": "document_idle"
     },
     {
@@ -42,26 +37,16 @@
         "https://www.zzimkkong.com/guest/*",
         "https://www.zzimkkong.com/guest"
       ],
-      "js": [
-        "src/page-bridge.js"
-      ],
+      "js": ["src/content/page-bridge.js"],
       "run_at": "document_idle",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "src/icon.png",
-        "src/fonts/BMDOHYEON_ttf.ttf"
-      ],
-      "matches": [
-        "https://zzimkkong.com/*",
-        "https://www.zzimkkong.com/*"
-      ]
+      "resources": ["src/assets/images/icon.png", "src/assets/fonts/BMDOHYEON_ttf.ttf", "src/content/panel.css"],
+      "matches": ["https://zzimkkong.com/*", "https://www.zzimkkong.com/*"]
     }
   ],
-  "host_permissions": [
-    "https://k8s.zzimkkong.com/*"
-  ]
+  "host_permissions": ["https://k8s.zzimkkong.com/*"]
 }
