@@ -1,6 +1,12 @@
 <img src="src/icon.png" alt="찜꽁 Helper 아이콘" width="120" />
 
+## 🌟 About This Project
+This repository is a community-driven utility tool built for the **Woowa Tech Course**, an elite software engineering program operated by South Korea's leading tech conglomerate. 
+
+While it may not have thousands of stars, hundreds of active developers and applicants in our local ecosystem **quietly depend on this tool every day** to streamline their development workflows, save time, and improve team collaboration.
+
 # 📌 찜꽁 Helper (Chrome Extension)
+
 
 찜꽁 사이트에서 회의실/페어링 존 예약을 편하게 처리할 수 있도록 돕는 Chrome 확장 프로그램입니다. ✨
 - 제작: `8기 프론트엔드 파라디`
